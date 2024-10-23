@@ -1,12 +1,12 @@
 import 'dart:io';
-import 'package:firebase_database/firebase_database.dart'; // Import Firebase Realtime Database
-import 'package:firebase_image_upload/pages/login.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:flutter_map/flutter_map.dart'; // Add this package to use maps
-import 'package:latlong2/latlong.dart'; // To use LatLng for location
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:firebase_image_upload/pages/login.dart';
 
 class SignUpPage extends StatelessWidget {
   @override
@@ -25,34 +25,70 @@ class SignUpForm extends StatefulWidget {
 }
 
 class _SignUpFormState extends State<SignUpForm> {
-  String? _selectedValue; // Variable to hold the selected type
-  final List<String> _options = ['rider', 'user']; // Dropdown options
+  String? _selectedValue; // ตัวแปรสำหรับเลือกประเภท user/rider
+  final List<String> _options = ['rider', 'user']; // ตัวเลือกประเภท
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
   final TextEditingController _vehicleNumberController =
-      TextEditingController(); // For rider
-  File? _image; // Variable to hold the picked image
-  LatLng? _selectedLocation; // To store the user's selected location
-  LatLng? _currentLocation; // Current device location
+      TextEditingController(); // สำหรับ rider
+  File? _image; // ตัวแปรสำหรับเก็บรูปที่ถ่าย
+  LatLng? _selectedLocation; // ตัวแปรเก็บตำแหน่งที่เลือกบนแผนที่
+  LatLng? _currentLocation; // ตัวแปรเก็บตำแหน่งปัจจุบันของเครื่อง
 
   @override
   void initState() {
     super.initState();
-    _getCurrentPosition(); // Get the current position of the device
+    _getCurrentPosition(); // เรียกฟังก์ชันหาตำแหน่งปัจจุบัน
   }
 
-  // ฟังก์ชันสำหรับรับตำแหน่งปัจจุบันของเครื่อง
-  Future<void> _getCurrentPosition() async {
-    Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high);
-    setState(() {
-      _currentLocation = LatLng(position.latitude, position.longitude);
-      _selectedLocation =
-          _currentLocation; // Set default marker to current location
-    });
+  // ฟังก์ชันสำหรับหาตำแหน่งปัจจุบันของเครื่อง
+Future<void> _getCurrentPosition() async {
+  bool serviceEnabled;
+  LocationPermission permission;
+
+  // ตรวจสอบว่าเปิดใช้งานบริการตำแหน่งหรือไม่
+  serviceEnabled = await Geolocator.isLocationServiceEnabled();
+  if (!serviceEnabled) {
+    // หากไม่ได้เปิดใช้งานบริการตำแหน่ง ให้แสดงข้อความแจ้งผู้ใช้
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('Location services are disabled. Please enable the services'),
+    ));
+    return;
   }
+
+  // ตรวจสอบสิทธิ์การเข้าถึงตำแหน่ง
+  permission = await Geolocator.checkPermission();
+  if (permission == LocationPermission.denied) {
+    permission = await Geolocator.requestPermission();
+    if (permission == LocationPermission.denied) {
+      // หากผู้ใช้ปฏิเสธการให้สิทธิ์
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Location permissions are denied'),
+      ));
+      return;
+    }
+  }
+
+  if (permission == LocationPermission.deniedForever) {
+    // หากผู้ใช้ปฏิเสธการให้สิทธิ์อย่างถาวร
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('Location permissions are permanently denied, we cannot request permissions.'),
+    ));
+    return;
+  }
+
+  // เมื่อได้สิทธิ์เรียบร้อย ให้ดึงตำแหน่งปัจจุบัน
+  Position position = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high);
+
+  setState(() {
+    _currentLocation = LatLng(position.latitude, position.longitude);
+    _selectedLocation = _currentLocation; // กำหนดตำแหน่งปัจจุบันเป็นตำแหน่งที่เลือกเริ่มต้น
+  });
+}
+
 
   @override
   Widget build(BuildContext context) {
@@ -73,14 +109,12 @@ class _SignUpFormState extends State<SignUpForm> {
                 ),
               ),
               const SizedBox(height: 30),
-              // Tap to upload profile image
-              // Tap to upload profile image
+              // ถ่ายรูปโปรไฟล์
               GestureDetector(
                 onTap: () async {
                   final ImagePicker _picker = ImagePicker();
-                  final XFile? image = await _picker.pickImage(
-                      source: ImageSource
-                          .camera); // เปลี่ยนเป็น ImageSource.camera เพื่อเปิดกล้อง
+                  final XFile? image =
+                      await _picker.pickImage(source: ImageSource.camera);
                   if (image != null) {
                     setState(() {
                       _image = File(image.path);
@@ -95,9 +129,8 @@ class _SignUpFormState extends State<SignUpForm> {
                       : null,
                 ),
               ),
-
               const SizedBox(height: 30),
-              // Phone Number Field
+              // ฟิลด์เบอร์โทรศัพท์
               TextField(
                 controller: _phoneController,
                 decoration: InputDecoration(
@@ -109,7 +142,7 @@ class _SignUpFormState extends State<SignUpForm> {
                 ),
               ),
               const SizedBox(height: 20),
-              // Password Field
+              // ฟิลด์รหัสผ่าน
               TextField(
                 controller: _passwordController,
                 obscureText: true,
@@ -122,7 +155,7 @@ class _SignUpFormState extends State<SignUpForm> {
                 ),
               ),
               const SizedBox(height: 20),
-              // Name Field
+              // ฟิลด์ชื่อ
               TextField(
                 controller: _nameController,
                 decoration: InputDecoration(
@@ -134,7 +167,7 @@ class _SignUpFormState extends State<SignUpForm> {
                 ),
               ),
               const SizedBox(height: 20),
-              // Dropdown
+              // ตัวเลือกประเภท user/rider
               DropdownButtonFormField<String>(
                 decoration: InputDecoration(
                   labelText: 'Type',
@@ -147,7 +180,7 @@ class _SignUpFormState extends State<SignUpForm> {
                 onChanged: (String? newValue) {
                   setState(() {
                     _selectedValue = newValue;
-                    // If user is selected, load current location
+                    // ถ้าเลือก user ให้แสดงตำแหน่งปัจจุบัน
                     if (_selectedValue == 'user' && _currentLocation != null) {
                       _selectedLocation = _currentLocation;
                     }
@@ -161,7 +194,7 @@ class _SignUpFormState extends State<SignUpForm> {
                 }).toList(),
               ),
               const SizedBox(height: 20),
-              // Address for user
+              // สำหรับ user: ฟิลด์ที่อยู่ และการเลือกตำแหน่ง
               if (_selectedValue == 'user') ...[
                 TextField(
                   controller: _addressController,
@@ -187,12 +220,11 @@ class _SignUpFormState extends State<SignUpForm> {
                   height: 200,
                   width: double.infinity,
                   child: _currentLocation == null
-                      ? Center(
-                          child:
-                              CircularProgressIndicator()) // แสดงตัวโหลดขณะรอรับตำแหน่ง
+                      ? Center(child: CircularProgressIndicator())
                       : FlutterMap(
                           options: MapOptions(
-                            center: _currentLocation, // ฟิกที่ตำแหน่งปัจจุบัน
+                            center: _selectedLocation ??
+                                _currentLocation, // ฟิกที่ตำแหน่งปัจจุบัน
                             zoom: 13.0,
                             onTap: (tapPosition, LatLng point) {
                               setState(() {
@@ -225,7 +257,7 @@ class _SignUpFormState extends State<SignUpForm> {
                         ),
                 ),
               ],
-              // Vehicle Number for rider
+              // สำหรับ rider: ฟิลด์หมายเลขทะเบียนรถ
               if (_selectedValue == 'rider') ...[
                 TextField(
                   controller: _vehicleNumberController,
@@ -240,10 +272,10 @@ class _SignUpFormState extends State<SignUpForm> {
                 const SizedBox(height: 20),
               ],
               const SizedBox(height: 50),
-              // Sign Up Button
+              // ปุ่มลงทะเบียน
               ElevatedButton(
                 onPressed: () {
-                  // Handle sign up logic here, save data to Realtime Database
+                  // ดำเนินการลงทะเบียน
                   _signUp(context);
                 },
                 child: const Text('Sign up'),
@@ -294,15 +326,12 @@ class _SignUpFormState extends State<SignUpForm> {
 
   Future<String> _uploadImageToFirebase(File imageFile) async {
     try {
-      // Create a reference to Firebase Storage
+      // อัพโหลดรูปภาพไปยัง Firebase Storage
       final storageRef = FirebaseStorage.instance.ref();
       final imageRef = storageRef
           .child('images/${DateTime.now().millisecondsSinceEpoch}.png');
 
-      // Upload the image
       await imageRef.putFile(imageFile);
-
-      // Get the download URL
       String downloadUrl = await imageRef.getDownloadURL();
       return downloadUrl;
     } catch (e) {
@@ -318,7 +347,7 @@ class _SignUpFormState extends State<SignUpForm> {
     String address = _addressController.text;
     String vehicleNumber = _vehicleNumberController.text;
 
-    // Check if the necessary fields are filled
+    // ตรวจสอบว่าได้กรอกข้อมูลครบหรือไม่
     if (phone.isEmpty || password.isEmpty || name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Please fill in all required fields')),
@@ -326,16 +355,14 @@ class _SignUpFormState extends State<SignUpForm> {
       return;
     }
 
-    // Upload image if available
+    // อัพโหลดรูปโปรไฟล์ถ้ามี
     String imageUrl = '';
     if (_image != null) {
       imageUrl = await _uploadImageToFirebase(_image!);
     }
 
-    // Create a reference to the Realtime Database
+    // บันทึกข้อมูลผู้ใช้ไปยัง Firebase Realtime Database
     final databaseRef = FirebaseDatabase.instance.ref().child('users/$phone');
-
-    // Example Realtime Database integration
     try {
       await databaseRef.set({
         'phone': phone,
@@ -354,7 +381,7 @@ class _SignUpFormState extends State<SignUpForm> {
       });
       print("User signed up successfully.");
 
-      // Navigate back to login page
+      // ไปหน้า Login หลังจากลงทะเบียนเสร็จ
       Navigator.pushReplacement(
           context, MaterialPageRoute(builder: (context) => const LoginPage()));
     } catch (e) {
