@@ -1,9 +1,12 @@
-import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ProfilePage extends StatefulWidget {
   @override
@@ -14,27 +17,27 @@ class _ProfilePageState extends State<ProfilePage> {
   TextEditingController nameController = TextEditingController();
   TextEditingController addressController = TextEditingController();
   LatLng? selectedLocation;
-  LatLng? userLocation; // ตำแหน่งที่ดึงมาจาก Firebase
-  LatLng? currentLocation; // ตำแหน่งปัจจุบันของอุปกรณ์
+  LatLng? userLocation;
+  LatLng? currentLocation;
   String phoneNumber = '';
   String? profileImageUrl;
   DatabaseReference _database = FirebaseDatabase.instance.ref();
+  File? _imageFile; // For storing the selected image
 
   @override
   void initState() {
     super.initState();
-    loadUserProfile(); // โหลดโปรไฟล์จาก Firebase
+    loadUserProfile(); // Load user profile from Firebase
   }
 
+  // ฟังก์ชันสำหรับโหลดข้อมูลโปรไฟล์
   Future<void> loadUserProfile() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     phoneNumber = prefs.getString('phone') ?? '';
 
-    // ดึงข้อมูลโปรไฟล์ผู้ใช้จาก Firebase
     final snapshot = await _database.child('users/$phoneNumber').get();
     if (snapshot.exists) {
-      Map<String, dynamic> userData =
-          Map<String, dynamic>.from(snapshot.value as Map);
+      Map<String, dynamic> userData = Map<String, dynamic>.from(snapshot.value as Map);
       setState(() {
         nameController.text = userData['name'] ?? 'No Name';
         addressController.text = userData['address'] ?? 'No Address';
@@ -42,29 +45,34 @@ class _ProfilePageState extends State<ProfilePage> {
         userLocation = LatLng(
           userData['location']['latitude'],
           userData['location']['longitude'],
-        ); // ใช้ตำแหน่งจาก Firebase
-        selectedLocation =
-            userLocation; // ตั้งตำแหน่งที่ผู้ใช้เลือกเป็นตำแหน่งในฐานข้อมูล
+        );
+        selectedLocation = userLocation;
       });
     } else {
-      _getCurrentLocation(); // ถ้าไม่มีข้อมูลใน Firebase ให้ใช้ตำแหน่งปัจจุบัน
+      _getCurrentLocation();
     }
   }
 
+  // ฟังก์ชันสำหรับรับตำแหน่งปัจจุบัน
   Future<void> _getCurrentLocation() async {
-    Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high);
+    Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
     setState(() {
       currentLocation = LatLng(position.latitude, position.longitude);
       if (selectedLocation == null) {
-        selectedLocation =
-            currentLocation; // ถ้าไม่มีตำแหน่งที่บันทึกไว้ ใช้ตำแหน่งปัจจุบัน
+        selectedLocation = currentLocation;
       }
     });
   }
 
+  // ฟังก์ชันสำหรับอัปเดตโปรไฟล์ผู้ใช้ใน Firebase
   Future<void> updateUserProfile() async {
     if (phoneNumber.isNotEmpty) {
+      // อัปโหลดรูปภาพถ้ามีการเลือกรูปใหม่
+      String? newImageUrl;
+      if (_imageFile != null) {
+        newImageUrl = await _uploadImageToFirebase(_imageFile!);
+      }
+
       await _database.child('users/$phoneNumber').update({
         'name': nameController.text,
         'address': addressController.text,
@@ -72,10 +80,39 @@ class _ProfilePageState extends State<ProfilePage> {
           'latitude': selectedLocation?.latitude ?? 0,
           'longitude': selectedLocation?.longitude ?? 0,
         },
+        'imageUrl': newImageUrl ?? profileImageUrl, // ใช้รูปใหม่ถ้ามี หรือคงรูปเก่าไว้
       });
+
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Profile updated successfully!'),
       ));
+    }
+  }
+
+  // ฟังก์ชันสำหรับเปิดกล้องเพื่อถ่ายรูป
+  Future<void> _pickImageFromCamera() async {
+    final ImagePicker _picker = ImagePicker();
+    final XFile? pickedFile = await _picker.pickImage(source: ImageSource.camera); // เปิดกล้อง
+
+    if (pickedFile != null) {
+      setState(() {
+        _imageFile = File(pickedFile.path); // บันทึกไฟล์รูปที่ถ่าย
+      });
+    }
+  }
+
+  // ฟังก์ชันสำหรับอัปโหลดรูปภาพไปยัง Firebase Storage
+  Future<String> _uploadImageToFirebase(File imageFile) async {
+    try {
+      final storageRef = FirebaseStorage.instance.ref();
+      final imageRef = storageRef.child('profile_images/${DateTime.now().millisecondsSinceEpoch}.png');
+
+      await imageRef.putFile(imageFile);
+      String downloadUrl = await imageRef.getDownloadURL();
+      return downloadUrl;
+    } catch (e) {
+      print("Error uploading image: $e");
+      return '';
     }
   }
 
@@ -92,17 +129,17 @@ class _ProfilePageState extends State<ProfilePage> {
           children: [
             SizedBox(height: 20),
             GestureDetector(
-              onTap: () {
-                // Add functionality for picking a profile image if needed
-              },
+              onTap: _pickImageFromCamera, // เปิดกล้องเมื่อกดที่รูปภาพ
               child: CircleAvatar(
                 radius: 50,
-                backgroundImage: profileImageUrl != null
-                    ? NetworkImage(profileImageUrl!)
-                    : AssetImage('assets/default_profile.png') as ImageProvider,
+                backgroundImage: _imageFile != null
+                    ? FileImage(_imageFile!) // แสดงรูปที่ถ่ายใหม่ถ้ามี
+                    : profileImageUrl != null
+                        ? NetworkImage(profileImageUrl!)
+                        : AssetImage('assets/default_profile.png') as ImageProvider,
               ),
             ),
-            SizedBox(height: 20),
+                        SizedBox(height: 20),
 
             // Name TextField
             TextField(
@@ -124,32 +161,25 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             SizedBox(height: 20),
 
-            // แสดงแผนที่โดยเริ่มต้นที่ตำแหน่งใน Firebase ถ้ามี หรือใช้ตำแหน่งปัจจุบัน
+            // แสดงแผนที่และตำแหน่ง
             Container(
               height: 300,
               width: double.infinity,
               child: userLocation == null
-                  ? Center(
-                      child:
-                          CircularProgressIndicator()) // แสดง loading ถ้ายังไม่ได้ตำแหน่ง
+                  ? Center(child: CircularProgressIndicator())
                   : FlutterMap(
                       options: MapOptions(
-                        center: selectedLocation ??
-                            userLocation ??
-                            LatLng(13.736717,
-                                100.523186), // ใช้ตำแหน่งจาก Firebase หรือปัจจุบัน
+                        center: selectedLocation ?? userLocation ?? LatLng(13.736717, 100.523186),
                         zoom: 13.0,
                         onTap: (tapPosition, point) {
                           setState(() {
-                            selectedLocation =
-                                point; // เปลี่ยนตำแหน่งที่ผู้ใช้เลือก
+                            selectedLocation = point; // เปลี่ยนตำแหน่งที่ผู้ใช้เลือก
                           });
                         },
                       ),
                       children: [
                         TileLayer(
-                          urlTemplate:
-                              "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                          urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
                           subdomains: ['a', 'b', 'c'],
                         ),
                         MarkerLayer(
@@ -165,7 +195,6 @@ class _ProfilePageState extends State<ProfilePage> {
                                   size: 40,
                                 ),
                               ),
-                            // Marker ที่แสดงตำแหน่งปัจจุบันของผู้ใช้จาก Firebase
                             if (userLocation != null)
                               Marker(
                                 width: 80.0,
@@ -182,7 +211,6 @@ class _ProfilePageState extends State<ProfilePage> {
                       ],
                     ),
             ),
-
             SizedBox(height: 20),
 
             // Save Button
