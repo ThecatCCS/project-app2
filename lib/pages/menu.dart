@@ -65,8 +65,23 @@ class _MenuPageState extends State<MenuPage> {
     }
   }
 
-  // ฟังก์ชันสำหรับการซื้อสินค้า
-  void addToCart(Map<String, dynamic> item) {
+  // ฟังก์ชันสำหรับการซื้อสินค้า (เพิ่มลงตะกร้าและบันทึกไป Firebase)
+  void addToCart(Map<String, dynamic> item) async {
+    // สร้างการสั่งซื้อใหม่และบันทึกไปยัง Firebase
+    final orderRef = _database.child('orders').push();
+    
+    Map<String, dynamic> orderData = {
+      'buyer': phoneNumber, // หมายเลขโทรศัพท์ผู้ซื้อ
+      'seller': item['phoneNumber'], // หมายเลขโทรศัพท์ผู้ขาย
+      'name': item['name'], // ชื่อสินค้า
+      'quantity': item['quantity'], // จำนวน
+      'description': item['description'], // รายละเอียดสินค้า
+      'imageUrl': item['imageUrl'], // URL รูปภาพสินค้า
+      'status': 'รอไรเดอร์รับงาน', // สถานะคำสั่งซื้อเริ่มต้น
+    };
+
+    await orderRef.set(orderData);
+
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text('เพิ่ม ${item['name']} ในตะกร้าแล้ว!'),
     ));
