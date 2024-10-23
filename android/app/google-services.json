@@ -1,0 +1,49 @@
+{
+  "project_info": {
+    "project_number": "727520296469",
+    "firebase_url": "https://lastprojectapp2-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "lastprojectapp2",
+    "storage_bucket": "lastprojectapp2.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:727520296469:android:e66fb7a908dac02e95181c",
+        "android_client_info": {
+          "package_name": "com.example.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyApsGt8CvSmHfsN9EcKOOiU1EbukVrupyE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:727520296469:android:8fce0cae0ebe76aa95181c",
+        "android_client_info": {
+          "package_name": "com.example.firebase_image_upload"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyApsGt8CvSmHfsN9EcKOOiU1EbukVrupyE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

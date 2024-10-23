@@ -1,0 +1,47 @@
+apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
+apply plugin: 'dev.flutter.flutter-gradle-plugin'
+apply plugin: 'com.google.gms.google-services'  // Google services plugin
+
+android {
+    namespace 'com.example.firebase_image_upload'
+    compileSdk flutter.compileSdkVersion
+    ndkVersion flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_1_8
+    }
+
+    defaultConfig {
+        applicationId "com.example.firebase_image_upload"
+        minSdk flutter.minSdkVersion
+        targetSdk flutter.targetSdkVersion
+        versionCode flutter.versionCode
+        versionName flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.debug
+        }
+    }
+}
+
+flutter {
+    source '../..'
+}
+
+dependencies {
+    // Import the Firebase BoM
+    implementation platform('com.google.firebase:firebase-bom:33.4.0')
+
+    // Add Firebase services without specifying the version
+    implementation 'com.google.firebase:firebase-analytics'
+    implementation 'com.google.firebase:firebase-firestore'
+    implementation 'com.google.firebase:firebase-storage'
+}
