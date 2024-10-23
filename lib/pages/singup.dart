@@ -74,11 +74,13 @@ class _SignUpFormState extends State<SignUpForm> {
               ),
               const SizedBox(height: 30),
               // Tap to upload profile image
+              // Tap to upload profile image
               GestureDetector(
                 onTap: () async {
                   final ImagePicker _picker = ImagePicker();
-                  final XFile? image =
-                      await _picker.pickImage(source: ImageSource.gallery);
+                  final XFile? image = await _picker.pickImage(
+                      source: ImageSource
+                          .camera); // เปลี่ยนเป็น ImageSource.camera เพื่อเปิดกล้อง
                   if (image != null) {
                     setState(() {
                       _image = File(image.path);
@@ -93,6 +95,7 @@ class _SignUpFormState extends State<SignUpForm> {
                       : null,
                 ),
               ),
+
               const SizedBox(height: 30),
               // Phone Number Field
               TextField(
