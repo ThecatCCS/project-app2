@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class RiderProfilePage extends StatefulWidget {
   @override
@@ -8,19 +11,74 @@ class RiderProfilePage extends StatefulWidget {
 }
 
 class _RiderProfilePageState extends State<RiderProfilePage> {
-  final TextEditingController nameController = TextEditingController(text: 'John Doe');
-  final TextEditingController phoneController = TextEditingController(text: '1234567890');
-  final TextEditingController addressController = TextEditingController(text: '123 Main St');
-  final TextEditingController licensePlateController = TextEditingController(text: 'AB-1234');
-  
-  File? _imageFile; // ตัวแปรสำหรับเก็บรูปถ่าย
+  final TextEditingController nameController = TextEditingController();
+  final TextEditingController licensePlateController = TextEditingController();
+  File? _profileImage; // สำหรับเก็บรูปโปรไฟล์
+  String phoneNumber = ''; // สำหรับเก็บหมายเลขโทรศัพท์ของผู้ใช้งาน
+  DatabaseReference _database = FirebaseDatabase.instance.ref(); // Realtime Database Reference
+  String? profileImageUrl; // URL ของรูปโปรไฟล์จาก Realtime Database
 
-  // ฟังก์ชันสำหรับถ่ายรูปทะเบียนรถ
-  Future<void> _pickImage() async {
+  @override
+  void initState() {
+    super.initState();
+    _fetchRiderInfo(); // ดึงข้อมูลผู้ขับขี่จาก Realtime Database
+  }
+
+  // ฟังก์ชันดึงข้อมูลจาก Realtime Database
+  Future<void> _fetchRiderInfo() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    phoneNumber = prefs.getString('phone') ?? '';
+
+    final snapshot = await _database.child('users/$phoneNumber').get();
+    if (snapshot.exists) {
+      Map<String, dynamic> riderData = Map<String, dynamic>.from(snapshot.value as Map);
+      setState(() {
+        nameController.text = riderData['name'] ?? '';
+        licensePlateController.text = riderData['vehicleNumber'] ?? '';
+        profileImageUrl = riderData['imageUrl']; // ดึง URL รูปจาก Realtime Database
+      });
+    }
+  }
+
+  // ฟังก์ชันอัปโหลดรูปโปรไฟล์ไปยัง Firebase Storage
+  Future<String> _uploadProfileImage(File image) async {
+    try {
+      String fileName = 'profileImages/$phoneNumber';
+      Reference firebaseStorageRef = FirebaseStorage.instance.ref().child(fileName);
+      UploadTask uploadTask = firebaseStorageRef.putFile(image);
+      TaskSnapshot taskSnapshot = await uploadTask;
+      return await taskSnapshot.ref.getDownloadURL(); // คืนค่า URL หลังจากอัปโหลดเสร็จสิ้น
+    } catch (e) {
+      throw Exception("Failed to upload image: $e");
+    }
+  }
+
+  // ฟังก์ชันบันทึกข้อมูลไปยัง Realtime Database
+  Future<void> _saveRiderInfo() async {
+    if (phoneNumber.isEmpty) return;
+
+    Map<String, dynamic> updatedData = {
+      'name': nameController.text,
+      'vehicleNumber': licensePlateController.text,
+    };
+
+    if (_profileImage != null) {
+      String imageUrl = await _uploadProfileImage(_profileImage!);
+      updatedData['imageUrl'] = imageUrl; // เพิ่ม URL รูปภาพลงใน Realtime Database
+    }
+
+    await _database.child('users/$phoneNumber').update(updatedData); // อัปเดตข้อมูลใน Realtime Database
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('ข้อมูลถูกบันทึกเรียบร้อยแล้ว!')),
+    );
+  }
+
+  // ฟังก์ชันสำหรับถ่ายรูปโปรไฟล์
+  Future<void> _pickProfileImage() async {
     final pickedFile = await ImagePicker().pickImage(source: ImageSource.camera);
     if (pickedFile != null) {
       setState(() {
-        _imageFile = File(pickedFile.path); // บันทึกไฟล์รูป
+        _profileImage = File(pickedFile.path);
       });
     }
   }
@@ -31,7 +89,7 @@ class _RiderProfilePageState extends State<RiderProfilePage> {
       appBar: AppBar(
         title: Text('Rider Profile'),
       ),
-      body: SingleChildScrollView( // ใช้ SingleChildScrollView เพื่อแก้ปัญหาการ Overflow
+      body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
@@ -39,84 +97,35 @@ class _RiderProfilePageState extends State<RiderProfilePage> {
             children: [
               SizedBox(height: 50),
 
-              // Avatar
-              CircleAvatar(
-                radius: 50,
-                backgroundImage: NetworkImage('https://example.com/profile.jpg'), // เปลี่ยน URL ของรูปโปรไฟล์ได้
-              ),
-              SizedBox(height: 30),
-
-              // ข้อมูลที่แสดงอยู่ใน TextField
-              _buildProfileTextField('Name', nameController),
-              SizedBox(height: 20),
-
-              _buildProfileTextField('Phone', phoneController),
-              SizedBox(height: 20),
-
-              _buildProfileTextField('Address', addressController),
-              SizedBox(height: 20),
-
-              _buildProfileTextField('License Plate', licensePlateController),
-              SizedBox(height: 20),
-
-              // รูปทะเบียนรถ
-              _imageFile == null
-                  ? Text('No image selected.')
-                  : Image.file(
-                      _imageFile!,
-                      width: 300,
-                      height: 130,
-                      fit: BoxFit.cover,
-                    ),
-              SizedBox(height: 20),
-
-              ElevatedButton.icon(
-                onPressed: _pickImage, // ถ่ายรูปทะเบียนรถ
-                icon: Icon(Icons.camera_alt),
-                label: Text('ถ่ายรูปทะเบียนรถ'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green, // สีพื้นหลังปุ่ม
+              // Avatar สำหรับรูปโปรไฟล์
+              GestureDetector(
+                onTap: _pickProfileImage, // กดเพื่อถ่ายรูปใหม่
+                child: CircleAvatar(
+                  radius: 50,
+                  backgroundImage: _profileImage != null
+                      ? FileImage(_profileImage!)
+                      : profileImageUrl != null
+                          ? NetworkImage(profileImageUrl!)
+                          : AssetImage('assets/default_profile.png') as ImageProvider,
                 ),
               ),
               SizedBox(height: 30),
 
+              // ฟิลด์สำหรับแสดงและแก้ไขข้อมูลชื่อและหมายเลขทะเบียนรถ
+              _buildProfileTextField('Name', nameController),
+              SizedBox(height: 20),
+              _buildProfileTextField('License Plate', licensePlateController),
+              SizedBox(height: 20),
+
               // ปุ่มบันทึกข้อมูล
               ElevatedButton(
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (BuildContext context) {
-                      return AlertDialog(
-                        title: Text('ยืนยันการบันทึก'),
-                        content: Text('คุณต้องการบันทึกข้อมูลหรือไม่?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () {
-                              Navigator.of(context).pop(); // ปิด dialog
-                            },
-                            child: Text('ยกเลิก'),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              // เพิ่มลอจิกสำหรับบันทึกข้อมูลที่นี่
-                              Navigator.of(context).pop();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('ข้อมูลถูกบันทึกเรียบร้อยแล้ว!')),
-                              );
-                            },
-                            child: Text('ยืนยัน'),
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                },
+                onPressed: _saveRiderInfo, // เรียกฟังก์ชันบันทึกข้อมูล
                 child: Text(
                   'Save',
                   style: TextStyle(color: Colors.white),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green, // สีพื้นหลังปุ่ม
+                  backgroundColor: Colors.green,
                 ),
               ),
             ],
@@ -126,7 +135,7 @@ class _RiderProfilePageState extends State<RiderProfilePage> {
     );
   }
 
-  // Widget สำหรับสร้าง TextField พร้อม Label
+  // ฟังก์ชันสร้าง TextField พร้อม Label
   Widget _buildProfileTextField(String label, TextEditingController controller) {
     return TextField(
       controller: controller,

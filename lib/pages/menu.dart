@@ -66,10 +66,21 @@ class _MenuPageState extends State<MenuPage> {
   }
 
   // ฟังก์ชันสำหรับการซื้อสินค้า (เพิ่มลงตะกร้าและบันทึกไป Firebase)
-  void addToCart(Map<String, dynamic> item) async {
-    // สร้างการสั่งซื้อใหม่และบันทึกไปยัง Firebase
-    final orderRef = _database.child('orders').push();
+ void addToCart(Map<String, dynamic> item) async {
+  // สร้างการสั่งซื้อใหม่และบันทึกไปยัง Firebase
+  final orderRef = _database.child('orders').push();
+  
+  // ดึงข้อมูลของผู้ขาย
+  final sellerSnapshot = await _database.child('users/${item['phoneNumber']}').get();
+  
+  // ดึงข้อมูลของผู้ซื้อ
+  final buyerSnapshot = await _database.child('users/$phoneNumber').get();
+  
+  if (sellerSnapshot.exists && buyerSnapshot.exists) {
+    Map<String, dynamic> sellerData = Map<String, dynamic>.from(sellerSnapshot.value as Map);
+    Map<String, dynamic> buyerData = Map<String, dynamic>.from(buyerSnapshot.value as Map);
     
+    // สร้างตำแหน่งผู้ขายและผู้ซื้อจากข้อมูล
     Map<String, dynamic> orderData = {
       'buyer': phoneNumber, // หมายเลขโทรศัพท์ผู้ซื้อ
       'seller': item['phoneNumber'], // หมายเลขโทรศัพท์ผู้ขาย
@@ -77,7 +88,15 @@ class _MenuPageState extends State<MenuPage> {
       'quantity': item['quantity'], // จำนวน
       'description': item['description'], // รายละเอียดสินค้า
       'imageUrl': item['imageUrl'], // URL รูปภาพสินค้า
-      'status': 'รอไรเดอร์รับงาน', // สถานะคำสั่งซื้อเริ่มต้น
+      'status': 'กำลังทำอาหาร', // สถานะคำสั่งซื้อเริ่มต้น
+      'sellerLocation': { // ตำแหน่งของผู้ขาย
+        'latitude': sellerData['location']['latitude'],
+        'longitude': sellerData['location']['longitude'],
+      },
+      'buyerLocation': { // ตำแหน่งของผู้ซื้อ
+        'latitude': buyerData['location']['latitude'],
+        'longitude': buyerData['location']['longitude'],
+      },
     };
 
     await orderRef.set(orderData);
@@ -85,30 +104,57 @@ class _MenuPageState extends State<MenuPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text('เพิ่ม ${item['name']} ในตะกร้าแล้ว!'),
     ));
+  } else {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('ไม่สามารถดึงข้อมูลตำแหน่งได้'),
+    ));
   }
+}
+
 
   // ฟังก์ชันสำหรับนำไปสู่หน้ารายละเอียดเมนู
   void goToMenuDetail(Map<String, dynamic> item) async {
-    final sellerSnapshot = await _database.child('users/${item['phoneNumber']}').get();
-    if (sellerSnapshot.exists) {
-      Map<String, dynamic> sellerData = Map<String, dynamic>.from(sellerSnapshot.value as Map);
-      LatLng sellerLocation = LatLng(
-        sellerData['location']['latitude'],
-        sellerData['location']['longitude'],
-      );
+  // ดึงข้อมูลของผู้ขาย
+  final sellerSnapshot = await _database.child('users/${item['phoneNumber']}').get();
+  
+  // ดึงข้อมูลของผู้ซื้อ
+  final buyerSnapshot = await _database.child('users/$phoneNumber').get();
+  
+  if (sellerSnapshot.exists && buyerSnapshot.exists) {
+    Map<String, dynamic> sellerData = Map<String, dynamic>.from(sellerSnapshot.value as Map);
+    Map<String, dynamic> buyerData = Map<String, dynamic>.from(buyerSnapshot.value as Map);
+    
+    // สร้างตำแหน่งผู้ขายและผู้ซื้อจากข้อมูล
+    LatLng sellerLocation = LatLng(
+      sellerData['location']['latitude'],
+      sellerData['location']['longitude'],
+    );
 
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => MenuDetailPage(
-            item: item,
-            sellerData: sellerData,
-            sellerLocation: sellerLocation,
-          ),
+    LatLng buyerLocation = LatLng(
+      buyerData['location']['latitude'],
+      buyerData['location']['longitude'],
+    );
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MenuDetailPage(
+          item: item,
+          sellerData: sellerData,
+          sellerLocation: sellerLocation,
+          buyerLocation: buyerLocation, // ส่งตำแหน่งของผู้ซื้อไปด้วย
         ),
-      );
-    }
+      ),
+    );
+  } else {
+    // แสดงข้อผิดพลาดถ้าข้อมูลไม่ถูกต้อง
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('ไม่สามารถดึงข้อมูลตำแหน่งได้'),
+    ));
   }
+}
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -267,11 +313,13 @@ class MenuDetailPage extends StatelessWidget {
   final Map<String, dynamic> item;
   final Map<String, dynamic> sellerData;
   final LatLng sellerLocation;
+  final LatLng buyerLocation;
 
   MenuDetailPage({
     required this.item,
     required this.sellerData,
     required this.sellerLocation,
+    required this.buyerLocation,
   });
 
   @override
@@ -312,12 +360,12 @@ class MenuDetailPage extends StatelessWidget {
               style: TextStyle(fontSize: 16),
             ),
             SizedBox(height: 20),
-            // แสดงแผนที่พร้อมหมากตำแหน่งของผู้ขาย
+            // แสดงแผนที่พร้อมตำแหน่งของผู้ขายและผู้ซื้อ
             Container(
               height: 300,
               child: FlutterMap(
                 options: MapOptions(
-                  center: sellerLocation,
+                  center: sellerLocation, // ใช้ตำแหน่งของผู้ขายเป็นจุดเริ่มต้น
                   zoom: 15.0,
                 ),
                 children: [
@@ -337,6 +385,16 @@ class MenuDetailPage extends StatelessWidget {
                           size: 40,
                         ),
                       ),
+                      Marker(
+                        width: 80.0,
+                        height: 80.0,
+                        point: buyerLocation, // เพิ่ม Marker สำหรับผู้ซื้อ
+                        builder: (ctx) => Icon(
+                          Icons.location_pin,
+                          color: Colors.blue,
+                          size: 40,
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -348,3 +406,5 @@ class MenuDetailPage extends StatelessWidget {
     );
   }
 }
+
+

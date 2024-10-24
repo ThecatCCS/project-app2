@@ -4,6 +4,9 @@ import 'package:geolocator/geolocator.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:async';
+import 'package:image_picker/image_picker.dart'; // นำเข้า ImagePicker
+import 'dart:io'; // นำเข้าฟังก์ชัน File
+import 'package:firebase_storage/firebase_storage.dart'; // นำเข้า Firebase Storage
 
 class ReceiveOrderPage extends StatefulWidget {
   final String orderId;
@@ -20,6 +23,7 @@ class _ReceiveOrderPageState extends State<ReceiveOrderPage> {
   LatLng? restaurantLocation;
   LatLng? customerLocation;
   late StreamSubscription<Position> positionStream;
+  File? _imageFile; // ตัวแปรสำหรับเก็บไฟล์ภาพ
 
   @override
   void initState() {
@@ -42,7 +46,9 @@ class _ReceiveOrderPageState extends State<ReceiveOrderPage> {
       distanceFilter: 10, // อัปเดตเมื่อมีการเปลี่ยนแปลงตำแหน่งมากกว่า 10 เมตร
     );
 
-    positionStream = Geolocator.getPositionStream(locationSettings: locationSettings).listen((Position position) {
+    positionStream =
+        Geolocator.getPositionStream(locationSettings: locationSettings)
+            .listen((Position position) {
       setState(() {
         riderPosition = position; // อัปเดตตำแหน่งใน UI
       });
@@ -53,7 +59,10 @@ class _ReceiveOrderPageState extends State<ReceiveOrderPage> {
   // อัปเดตตำแหน่งไรเดอร์ใน Firebase
   void _updateRiderLocation(Position position) async {
     await _database.child('orders/${widget.orderId}').update({
-      'riderLocation': {'latitude': position.latitude, 'longitude': position.longitude},
+      'riderLocation': {
+        'latitude': position.latitude,
+        'longitude': position.longitude
+      },
     });
   }
 
@@ -66,6 +75,9 @@ class _ReceiveOrderPageState extends State<ReceiveOrderPage> {
         restaurantLocation = _parseLatLng(orderData['sellerLocation']);
         customerLocation = _parseLatLng(orderData['buyerLocation']);
       });
+      // เพิ่มการพิมพ์ค่าตำแหน่งเพื่อตรวจสอบ
+      print('Restaurant Location: $restaurantLocation');
+      print('Customer Location: $customerLocation');
     }
   }
 
@@ -96,30 +108,78 @@ class _ReceiveOrderPageState extends State<ReceiveOrderPage> {
     Navigator.pop(context); // กลับไปหน้ารายการออเดอร์
   }
 
+  // ฟังก์ชันอัปโหลดภาพไปยัง Firebase Storage
+  Future<String?> _uploadImage(File imageFile) async {
+    try {
+      String fileName = DateTime.now().millisecondsSinceEpoch.toString();
+      Reference storageRef = FirebaseStorage.instance.ref().child('orderImages/$fileName');
+      UploadTask uploadTask = storageRef.putFile(imageFile);
+      TaskSnapshot snapshot = await uploadTask;
+      return await snapshot.ref.getDownloadURL();
+    } catch (e) {
+      print('Failed to upload image: $e');
+      return null;
+    }
+  }
+
+  // ฟังก์ชันสำหรับถ่ายภาพ
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.getImage(source: ImageSource.camera);
+    
+    if (pickedFile != null) {
+      setState(() {
+        _imageFile = File(pickedFile.path);
+      });
+    }
+  }
+
   // ฟังก์ชันเปลี่ยนสถานะและตำแหน่ง
   void _changeOrderStatus() async {
     String newStatus;
     if (currentStatus == 'กำลังไปรับอาหาร') {
       newStatus = 'ไรเดอร์กำลังจัดส่ง';
-      // เปลี่ยนไปยังตำแหน่งของลูกค้าเมื่อสถานะเป็น "กำลังจัดส่ง"
+
+      // เรียกฟังก์ชันเพื่อถ่ายภาพ
+      await _pickImage();
+      
+      if (_imageFile != null) {
+        String? imageUrl2 = await _uploadImage(_imageFile!); // อัปโหลดภาพ
+
+        // ถ้าอัปโหลดสำเร็จ อัปเดตสถานะพร้อม URL
+        if (imageUrl2 != null) {
+          await _database.child('orders/${widget.orderId}').update({
+            'status': newStatus,
+            'imageUrl2': imageUrl2, // เพิ่ม URL ของภาพเป็น imageUrl2
+          });
+        }
+      }
+      
       setState(() {
         currentStatus = newStatus;
-        _updateRiderLocation(riderPosition!); // อัปเดตตำแหน่งไรเดอร์แบบเรียลไทม์
       });
     } else if (currentStatus == 'ไรเดอร์กำลังจัดส่ง') {
       newStatus = 'จัดส่งสำเร็จ';
+
+      // เรียกฟังก์ชันเพื่อถ่ายภาพ
+      await _pickImage();
+
+      if (_imageFile != null) {
+        String? imageUrl3 = await _uploadImage(_imageFile!); // อัปโหลดภาพ
+
+        // ถ้าอัปโหลดสำเร็จ อัปเดตสถานะพร้อม URL
+        if (imageUrl3 != null) {
+          await _database.child('orders/${widget.orderId}').update({
+            'status': newStatus,
+            'imageUrl3': imageUrl3, // เพิ่ม URL ของภาพเป็น imageUrl3
+          });
+        }
+      }
+
       Navigator.pop(context); // เมื่อจัดส่งสำเร็จ กลับไปหน้ารายการออเดอร์
     } else {
       return;
     }
-
-    await _database.child('orders/${widget.orderId}').update({
-      'status': newStatus,
-    });
-
-    setState(() {
-      currentStatus = newStatus;
-    });
   }
 
   @override
@@ -133,7 +193,9 @@ class _ReceiveOrderPageState extends State<ReceiveOrderPage> {
         children: [
           // แสดงตำแหน่งร้านอาหารหรือลูกค้าตามสถานะ
           Expanded(
-            child: restaurantLocation == null || riderPosition == null
+            child: riderPosition == null ||
+                    restaurantLocation == null ||
+                    customerLocation == null
                 ? Center(child: CircularProgressIndicator())
                 : FlutterMap(
                     options: MapOptions(
@@ -174,6 +236,7 @@ class _ReceiveOrderPageState extends State<ReceiveOrderPage> {
                     ],
                   ),
           ),
+
           // ข้อมูลผู้ส่งและผู้รับ
           Padding(
             padding: const EdgeInsets.all(16.0),
@@ -184,7 +247,7 @@ class _ReceiveOrderPageState extends State<ReceiveOrderPage> {
                   children: [
                     CircleAvatar(radius: 30, child: Icon(Icons.person)),
                     SizedBox(height: 8),
-                    Text('ร้านอาหาร'),
+                    Text('ไรเดอร์'),
                   ],
                 ),
                 Icon(Icons.arrow_forward),
@@ -198,6 +261,7 @@ class _ReceiveOrderPageState extends State<ReceiveOrderPage> {
               ],
             ),
           ),
+
           // สถานะและปุ่มการจัดการ
           Padding(
             padding: const EdgeInsets.all(16.0),
@@ -212,12 +276,14 @@ class _ReceiveOrderPageState extends State<ReceiveOrderPage> {
                     ElevatedButton(
                       onPressed: _cancelOrder,
                       child: Text('ยกเลิกออร์เดอร์'),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                      style:
+                          ElevatedButton.styleFrom(backgroundColor: Colors.red),
                     ),
                     ElevatedButton(
                       onPressed: _changeOrderStatus,
                       child: Text('เปลี่ยนสถานะ'),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green),
                     ),
                   ],
                 ),

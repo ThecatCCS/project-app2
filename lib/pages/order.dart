@@ -34,13 +34,14 @@ class _OrderPageState extends State<OrderPage> {
     final snapshot = await _database.child('orders').get();
     if (snapshot.exists) {
       List<Map<String, dynamic>> fetchedOrders = [];
-      Map<String, dynamic> data = Map<String, dynamic>.from(snapshot.value as Map);
+      Map<String, dynamic> data =
+          Map<String, dynamic>.from(snapshot.value as Map);
       data.forEach((key, value) {
         Map<String, dynamic> order = Map<String, dynamic>.from(value);
-        // แสดงเฉพาะ order ของ buyer ที่เป็นผู้ใช้ปัจจุบัน
-        if (order['buyer'] == phoneNumber) {
-          fetchedOrders.add(order);
-        }
+        // Assuming 'key' is the orderId in Firebase
+        order['id'] = key;
+         // Attach the key as the orderId to the order
+        fetchedOrders.add(order);
       });
       setState(() {
         orders = fetchedOrders;
@@ -54,7 +55,9 @@ class _OrderPageState extends State<OrderPage> {
     List<Map<String, dynamic>> filteredItems = orders
         .where((item) =>
             item['name'].toLowerCase().contains(searchQuery.toLowerCase()) ||
-            item['description'].toLowerCase().contains(searchQuery.toLowerCase()))
+            item['description']
+                .toLowerCase()
+                .contains(searchQuery.toLowerCase()))
         .toList();
 
     return Scaffold(
@@ -122,45 +125,22 @@ class _OrderPageState extends State<OrderPage> {
 
                 return GestureDetector(
                   onTap: () {
-                    if (item['status'] == 'นำส่งสินค้าแล้ว') {
-                      // แสดงรายละเอียดเมื่อการจัดส่งสำเร็จ
-                      showDialog(
-                        context: context,
-                        builder: (context) {
-                          return AlertDialog(
-                            title: Text(item['name']),
-                            content: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Image.network(item['imageUrl']),
-                                SizedBox(height: 10),
-                                Text(item['description']),
-                                SizedBox(height: 10),
-                                Text('Quantity: x${item['quantity']}'),
-                                Text(
-                                  'Status: ${item['status']}',
-                                  style: TextStyle(color: statusColor),
-                                ),
-                              ],
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () {
-                                  Navigator.of(context).pop();
-                                },
-                                child: Text('Close'),
-                              ),
-                            ],
-                          );
-                        },
-                      );
-                    } else {
-                      // เปิดหน้าผู้ใช้สำหรับสถานะอื่น ๆ
+                    if (item['id'] != null) {
+                      print('Navigating with Order ID: ${item['id']}');
                       Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (context) =>
-                              UserchatPage(), // เปลี่ยนเป็นหน้าที่ต้องการ
+                              OrderChatPage(orderId: item['id']),
+                        ),
+                      );
+                    } else {
+                      print('Error: Order ID is null.');
+                      String orderId = item['id'] ?? 'defaultOrderId';
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => OrderChatPage(orderId: orderId),
                         ),
                       );
                     }

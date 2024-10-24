@@ -1,141 +1,236 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:firebase_database/firebase_database.dart'; // For Firebase Database
 
-class UserchatPage extends StatelessWidget {
+class OrderChatPage extends StatefulWidget {
+  final String orderId; // Order ID to track the order details
+  const OrderChatPage({Key? key, required this.orderId}) : super(key: key);
+
+  @override
+  _OrderChatPageState createState() => _OrderChatPageState();
+}
+
+class _OrderChatPageState extends State<OrderChatPage> {
+  LatLng? _shopLocation; // Shop location
+  LatLng? _currentLocation; // User's current location
+  LatLng? _riderLocation; // Rider's real-time location
+  String status = ''; // Shipment status
+  String? sellerName = ''; // Seller's name
+  String? sellerPhone = ''; // Seller's phone number
+  String? riderName = ''; // Rider's name
+  String? riderPhone = ''; // Rider's phone number
+  String? productName = ''; // Product name
+  String? productDescription = ''; // Product description
+  int? productQuantity; // Product quantity
+  String? productImageUrl; // Product image
+  String? imageUrl1;
+  String? imageUrl2;
+  String? imageUrl3;
+  bool isDelivering = false; // To check if status is "กำลังจัดส่ง"
+
+  final DatabaseReference _database = FirebaseDatabase.instance.ref(); // Firebase reference
+
+  @override
+  void initState() {
+    super.initState();
+    _getCurrentLocation();
+    _fetchOrderDetails();
+  }
+
+  // Function to get the current location of the user
+  Future<void> _getCurrentLocation() async {
+    Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+    setState(() {
+      _currentLocation = LatLng(position.latitude, position.longitude);
+    });
+  }
+
+  // Fetch order details including status and images from Firebase
+  Future<void> _fetchOrderDetails() async {
+  final snapshot = await _database.child('orders/${widget.orderId}').get();
+  if (snapshot.exists) {
+    Map<String, dynamic> orderData = Map<String, dynamic>.from(snapshot.value as Map);
+    
+    // เพิ่มการพิมพ์ผลลัพธ์เพื่อตรวจสอบ
+    print('Order Data: $orderData');
+
+    setState(() {
+      // Seller details
+      sellerName = 'Unknown'; // ไม่ได้มีในข้อมูล, คุณสามารถเพิ่มการดึงข้อมูลเพิ่มเติมหากมีข้อมูลในอนาคต
+      sellerPhone = orderData['seller'] ?? 'Unknown';  // ใช้ seller เป็น phone
+
+      // Rider details
+      riderName = orderData['riderName'] ?? 'No Rider Yet';
+      riderPhone = orderData['riderPhone'] ?? '';
+
+      // Product details
+      productName = orderData['name'];
+      productDescription = orderData['description'];
+      productQuantity = orderData['quantity'];
+      productImageUrl = orderData['imageUrl'];
+
+      // Shipment status and images
+      _shopLocation = LatLng(orderData['sellerLocation']['latitude'], orderData['sellerLocation']['longitude']);
+      status = orderData['status'] ?? 'Unknown Status';
+      imageUrl1 = orderData['imageUrl1'];
+      imageUrl2 = orderData['imageUrl2'];
+      imageUrl3 = orderData['imageUrl3'];
+
+      // Check if the status is "กำลังจัดส่ง" (Delivering)
+      if (status == 'กำลังจัดส่ง') {
+        isDelivering = true;
+        _listenForRiderLocation(); // Start real-time location updates for the rider
+      }
+    });
+  } else {
+    print('Order not found or has no data.');
+  }
+}
+
+
+  // Listen for rider's real-time location updates from Firebase
+  void _listenForRiderLocation() {
+    _database.child('orders/${widget.orderId}/riderLocation').onValue.listen((event) {
+      if (event.snapshot.exists) {
+        Map<String, dynamic> locationData = Map<String, dynamic>.from(event.snapshot.value as Map);
+        setState(() {
+          _riderLocation = LatLng(locationData['latitude'], locationData['longitude']);
+        });
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Chat'),
+        title: Text('Order & Shipment Details'),
         backgroundColor: Color.fromARGB(255, 75, 161, 72),
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back),
-          onPressed: () {
-            Navigator.pop(context); // Go back to the previous page
-          },
-        ),
       ),
-      body: Padding(
+      body: Column(
+        children: [
+          _buildMap(),  // Display map
+          Expanded(child: _buildStatusAndImages()),  // Make the status scrollable
+        ],
+      ),
+    );
+  }
+
+  // Build the Map widget
+  Widget _buildMap() {
+    return Container(
+      height: 300,
+      child: _currentLocation == null || (_shopLocation == null && _riderLocation == null)
+          ? Center(child: CircularProgressIndicator())
+          : FlutterMap(
+              options: MapOptions(
+                center: _currentLocation,
+                zoom: 13.0,
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                  subdomains: ['a', 'b', 'c'],
+                ),
+                MarkerLayer(
+                  markers: [
+                    // Marker for user's current location
+                    Marker(
+                      width: 80.0,
+                      height: 80.0,
+                      point: _currentLocation!,
+                      builder: (ctx) => Icon(Icons.location_pin, color: Colors.blue, size: 40),
+                    ),
+                    // If the rider is delivering, show the rider's real-time location; otherwise, show the shop's location
+                    if (isDelivering && _riderLocation != null)
+                      Marker(
+                        width: 80.0,
+                        height: 80.0,
+                        point: _riderLocation!,
+                        builder: (ctx) => Icon(Icons.delivery_dining, color: Colors.orange, size: 40),
+                      )
+                    else if (_shopLocation != null)
+                      Marker(
+                        width: 80.0,
+                        height: 80.0,
+                        point: _shopLocation!,
+                        builder: (ctx) => Icon(Icons.store, color: Colors.green, size: 40),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+    );
+  }
+
+  // Build the status and images consecutively
+  Widget _buildStatusAndImages() {
+    return SingleChildScrollView(  // Make content scrollable to avoid overflow
+      child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Chat messages
-            Expanded(
-              child: ListView(
-                children: [
-                  // Sample chat messages
-                  ChatMessage(
-                    sender: 'User',
-                    text: 'Hello!',
-                    isMe: false,
-                  ),
-                  ChatMessage(
-                    sender: 'Me',
-                    text: 'Hi! How can I help you?',
-                    isMe: true,
-                  ),
-                  ChatMessage(
-                    sender: 'User',
-                    text: 'I have a question about my order.',
-                    isMe: false,
-                  ),
-                  // Add more messages as needed
-                ],
-              ),
-            ),
-            // Message input field
-            Padding(
-              padding: const EdgeInsets.only(top: 8.0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Type a message...',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.send),
-                    onPressed: () {
-                      // Handle send message action
-                    },
-                  ),
-                ],
-              ),
-            ),
+            // Display seller and rider details
+            if (sellerName != null) _buildContactInfo('Seller', sellerName, sellerPhone),
+            if (riderName != null && status == 'กำลังจัดส่ง') _buildContactInfo('Rider', riderName, riderPhone),
+
+            // Display product details
+            _buildProductDetails(),
+
+            // Display each status and the corresponding image
+            _buildStatusImage('รอไรเดอร์รับงาน', imageUrl1),
+            _buildStatusImage('กำลังจัดส่ง', imageUrl2),
+            _buildStatusImage('จัดส่งสำเร็จ', imageUrl3),
           ],
         ),
       ),
     );
   }
-}
 
-class ChatMessage extends StatelessWidget {
-  final String sender;
-  final String text;
-  final bool isMe;
+  // Helper widget to build the image associated with a status
+  Widget _buildStatusImage(String label, String? imageUrl) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        SizedBox(height: 10),
+        imageUrl != null
+            ? Image.network(imageUrl, height: 150, width: double.infinity, fit: BoxFit.cover)
+            : Text('No image available for this status.'),
+        SizedBox(height: 20),
+      ],
+    );
+  }
 
-  const ChatMessage({
-    Key? key,
-    required this.sender,
-    required this.text,
-    required this.isMe,
-  }) : super(key: key);
+  // Helper widget to display contact information
+  Widget _buildContactInfo(String role, String? name, String? phone) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('$role Name: $name', style: TextStyle(fontSize: 16)),
+        Text('$role Phone: $phone', style: TextStyle(fontSize: 16)),
+        SizedBox(height: 10),
+      ],
+    );
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        mainAxisAlignment:
-            isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-        children: [
-          if (!isMe) ...[
-            CircleAvatar(
-              child: Text(sender[0]), // Display first letter of sender's name
-            ),
-            SizedBox(width: 8),
-          ],
-          Expanded(
-            child: Column(
-              crossAxisAlignment:
-                  isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-              children: [
-                Text(
-                  sender,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Material(
-                  borderRadius: BorderRadius.circular(10),
-                  elevation: 2,
-                  child: Container(
-                    padding: EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: isMe ? Colors.blue : Colors.grey[300],
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      text,
-                      style: TextStyle(
-                        color: isMe ? Colors.white : Colors.black,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (isMe) ...[
-            SizedBox(width: 8),
-            CircleAvatar(
-              child: Text('Me'[0]), // Display first letter of "Me"
-            ),
-          ],
-        ],
-      ),
+  // Helper widget to display product details
+  Widget _buildProductDetails() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Product Details', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        SizedBox(height: 10),
+        if (productName != null) Text('Name: $productName', style: TextStyle(fontSize: 16)),
+        if (productDescription != null) Text('Description: $productDescription', style: TextStyle(fontSize: 16)),
+        if (productQuantity != null) Text('Quantity: $productQuantity', style: TextStyle(fontSize: 16)),
+        if (productImageUrl != null)
+          Image.network(productImageUrl!, height: 150, width: double.infinity, fit: BoxFit.cover),
+        SizedBox(height: 20),
+      ],
     );
   }
 }
