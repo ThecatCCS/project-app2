@@ -168,11 +168,10 @@ class _MenuPageState extends State<MenuPage> {
         .toList();
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('เมนูอาหาร'),
-      ),
+     
       body: Column(
         children: [
+          SizedBox(height: 20),
           // Search bar
           Container(
             padding: EdgeInsets.all(5),
@@ -324,87 +323,102 @@ class MenuDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(item['name']),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Image.network(
-              item['imageUrl'],
-              width: double.infinity,
-              height: 200,
-              fit: BoxFit.cover,
-            ),
-            SizedBox(height: 20),
-            Text(
-              'ชื่อเมนู: ${item['name']}',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 10),
-            Text(
-              'รายละเอียด: ${item['description']}',
-              style: TextStyle(fontSize: 16),
-            ),
-            SizedBox(height: 10),
-            Text(
-              'หมายเลขโทรศัพท์ผู้ขาย: ${item['phoneNumber']}',
-              style: TextStyle(fontSize: 16),
-            ),
-            SizedBox(height: 10),
-            Text(
-              'ชื่อผู้ขาย: ${sellerData['name']}',
-              style: TextStyle(fontSize: 16),
-            ),
-            SizedBox(height: 20),
-            // แสดงแผนที่พร้อมตำแหน่งของผู้ขายและผู้ซื้อ
-            Container(
-              height: 300,
-              child: FlutterMap(
-                options: MapOptions(
-                  center: sellerLocation, // ใช้ตำแหน่งของผู้ขายเป็นจุดเริ่มต้น
-                  zoom: 15.0,
-                ),
-                children: [
-                  TileLayer(
-                    urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-                    subdomains: ['a', 'b', 'c'],
-                  ),
-                  MarkerLayer(
-                    markers: [
-                      Marker(
-                        width: 80.0,
-                        height: 80.0,
-                        point: sellerLocation,
-                        builder: (ctx) => Icon(
-                          Icons.location_pin,
-                          color: Colors.red,
-                          size: 40,
-                        ),
-                      ),
-                      Marker(
-                        width: 80.0,
-                        height: 80.0,
-                        point: buyerLocation, // เพิ่ม Marker สำหรับผู้ซื้อ
-                        builder: (ctx) => Icon(
-                          Icons.location_pin,
-                          color: Colors.blue,
-                          size: 40,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+  return Scaffold(
+    backgroundColor: Colors.white, // ทำให้พื้นหลังเป็นสีเขียว
+    appBar: AppBar(
+      title: Text('รายละเอียดสินค้า'),
+    ),
+    body: Center( // ใช้ Center เพื่อจัดให้ทุกอย่างอยู่กึ่งกลางหน้าจอ
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Container(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center, // จัดแนวแกนหลักให้อยู่ตรงกลาง
+            crossAxisAlignment: CrossAxisAlignment.start, // จัดแนวแกนขวางให้อยู่ตรงกลาง
+            children: [
+              Image.network(
+                item['imageUrl'],
+                width: double.infinity,
+                height: 200,
+                fit: BoxFit.cover,
               ),
-            ),
-          ],
+              SizedBox(height: 20),
+              Text(
+                '${item['name']}',
+                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 10),
+              Text(
+                'รายละเอียด: ${item['description']}',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 10),
+              Text(
+                'หมายเลขโทรศัพท์ผู้ขาย: ${item['phoneNumber']}',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 10),
+              Text(
+                'ชื่อผู้ขาย: ${sellerData['name']}',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 20),
+               Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                 children: [
+                   Text(
+                    'ตำแหน่งร้านค้า',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                 ),
+                 ],
+               ),
+              Container(
+                height: 300,
+                child: FlutterMap(
+                  options: MapOptions(
+                    center: sellerLocation,
+                    zoom: 15.0,
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                      subdomains: ['a', 'b', 'c'],
+                    ),
+                    MarkerLayer(
+                      markers: [
+                        Marker(
+                          width: 80.0,
+                          height: 80.0,
+                          point: sellerLocation,
+                          builder: (ctx) => Icon(
+                            Icons.location_pin,
+                            color: Colors.red,
+                            size: 40,
+                          ),
+                        ),
+                        Marker(
+                          width: 80.0,
+                          height: 80.0,
+                          point: buyerLocation,
+                          builder: (ctx) => Icon(
+                            Icons.location_pin,
+                            color: Colors.blue,
+                            size: 40,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
+
 }
 
 

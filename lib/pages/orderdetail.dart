@@ -131,7 +131,17 @@ class _OrderChatPageState extends State<OrderChatPage> {
       body: Column(
         children: [
           _buildMap(),  // Display map
-          Text('Current Status: $status', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)), // Show current status
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Text(
+              'Current Status: $status',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.green.shade700,
+              ),
+            ),
+          ),
           Expanded(child: _buildStatusAndImages()),  // Make the status scrollable
         ],
       ),
@@ -191,27 +201,29 @@ class _OrderChatPageState extends State<OrderChatPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Display buyer details
-            if (buyerName != null) _buildContactInfo('Buyer', buyerName, buyerPhone),
-            if (buyerImageUrl != null && buyerImageUrl!.isNotEmpty) 
-              Image.network(buyerImageUrl!, height: 150, width: double.infinity, fit: BoxFit.cover),
-
-            SizedBox(height: 20),
+            _buildSectionHeader('Buyer Information'),
+            _buildContactInfo(buyerName, buyerPhone, buyerImageUrl),
+            Divider(),
 
             // Display rider details in every status (if data exists)
-            if (riderName != null && riderName!.isNotEmpty && riderPhone != null && riderPhone!.isNotEmpty)
-              _buildRiderInfo(),
+            if (riderName != null && riderName!.isNotEmpty && riderPhone != null && riderPhone!.isNotEmpty) 
+              Column(
+                children: [
+                  _buildSectionHeader('Rider Information'),
+                  _buildRiderInfo(),
+                  Divider(),
+                ],
+              ),
 
             // Display product details
+            _buildSectionHeader('Product Details'),
             _buildProductDetails(),
+            Divider(),
 
             // Display each status and the corresponding image if available
-            if (imageUrl1 != null && imageUrl1!.isNotEmpty)
-              _buildStatusImage('รอไรเดอร์รับงาน', imageUrl1),
-            if (imageUrl2 != null && imageUrl2!.isNotEmpty)
-              _buildStatusImage('กำลังจัดส่ง', imageUrl2),
-            if (imageUrl3 != null && imageUrl3!.isNotEmpty)
-              _buildStatusImage('จัดส่งสำเร็จ', imageUrl3),
+            _buildStatusImage('รอไรเดอร์รับงาน', imageUrl1),
+            _buildStatusImage('กำลังจัดส่ง', imageUrl2),
+            _buildStatusImage('จัดส่งสำเร็จ', imageUrl3),
           ],
         ),
       ),
@@ -228,20 +240,32 @@ class _OrderChatPageState extends State<OrderChatPage> {
       children: [
         Text(label, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         SizedBox(height: 10),
-        Image.network(imageUrl, height: 150, width: double.infinity, fit: BoxFit.cover),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Image.network(imageUrl, height: 150, width: double.infinity, fit: BoxFit.cover),
+        ),
         SizedBox(height: 20),
       ],
     );
   }
 
   // Helper widget to display contact information
-  Widget _buildContactInfo(String role, String? name, String? phone) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildContactInfo(String? name, String? phone, String? imageUrl) {
+    return Row(
       children: [
-        Text('$role Name: $name', style: TextStyle(fontSize: 16)),
-        Text('$role Phone: $phone', style: TextStyle(fontSize: 16)),
-        SizedBox(height: 10),
+        if (imageUrl != null && imageUrl.isNotEmpty)
+          CircleAvatar(
+            radius: 40,
+            backgroundImage: NetworkImage(imageUrl),
+          ),
+        SizedBox(width: 15),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('ชื่อผู้ซื้อ: $name', style: TextStyle(fontSize: 16)),
+            Text('เบอร์โทร: $phone', style: TextStyle(fontSize: 16)),
+          ],
+        ),
       ],
     );
   }
@@ -251,13 +275,14 @@ class _OrderChatPageState extends State<OrderChatPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Product Details', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        SizedBox(height: 10),
-        if (productName != null) Text('Name: $productName', style: TextStyle(fontSize: 16)),
-        if (productDescription != null) Text('Description: $productDescription', style: TextStyle(fontSize: 16)),
-        if (productQuantity != null) Text('Quantity: $productQuantity', style: TextStyle(fontSize: 16)),
+        if (productName != null) Text('สินค้าที่ซื้อ: $productName', style: TextStyle(fontSize: 16)),
+        if (productDescription != null) Text('รายละเอียด: $productDescription', style: TextStyle(fontSize: 16)),
+        if (productQuantity != null) Text('จำนวน: $productQuantity', style: TextStyle(fontSize: 16)),
         if (productImageUrl != null)
-          Image.network(productImageUrl!, height: 150, width: double.infinity, fit: BoxFit.cover),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.network(productImageUrl!, height: 150, width: double.infinity, fit: BoxFit.cover),
+          ),
         SizedBox(height: 20),
       ],
     );
@@ -265,21 +290,39 @@ class _OrderChatPageState extends State<OrderChatPage> {
 
   // Helper widget to build the rider's information
   Widget _buildRiderInfo() {
-    if (riderName != null && riderName!.isNotEmpty) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Rider Name: $riderName', style: TextStyle(fontSize: 16)),
-          Text('Rider Phone: $riderPhone', style: TextStyle(fontSize: 16)),
-          if (riderVehicleNumber != null && riderVehicleNumber!.isNotEmpty)
-            Text('Vehicle Number: $riderVehicleNumber', style: TextStyle(fontSize: 16)),
-          if (riderImageUrl != null)
-            Image.network(riderImageUrl!, height: 150, width: double.infinity, fit: BoxFit.cover),
-          SizedBox(height: 10),
-        ],
-      );
-    } else {
-      return Container(); // ไม่แสดงถ้าไม่มีข้อมูลไรเดอร์
-    }
+    return Row(
+      children: [
+        if (riderImageUrl != null && riderImageUrl!.isNotEmpty)
+          CircleAvatar(
+            radius: 40,
+            backgroundImage: NetworkImage(riderImageUrl!),
+          ),
+        SizedBox(width: 15),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Rider Name: $riderName', style: TextStyle(fontSize: 16)),
+            Text('Rider Phone: $riderPhone', style: TextStyle(fontSize: 16)),
+            if (riderVehicleNumber != null && riderVehicleNumber!.isNotEmpty)
+              Text('Vehicle Number: $riderVehicleNumber', style: TextStyle(fontSize: 16)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // Helper widget to create section headers
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10.0),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+          color: Colors.green.shade700,
+        ),
+      ),
+    );
   }
 }

@@ -19,11 +19,11 @@ class _OrderChatPageState extends State<OrderChatPage> {
   String status = ''; // Shipment status
   String? sellerName = ''; // Seller's name
   String? sellerPhone = ''; // Seller's phone number
-  String? sellerImageUrl = ''; // Seller's image URL 
+  String? sellerImageUrl = ''; // Seller's image URL
   String? riderName = ''; // Rider's name
   String? riderPhone = ''; // Rider's phone number
-  String? riderImageUrl = ''; // Rider's image URL 
-  String? riderVehicleNumber = ''; // Rider's vehicle number 
+  String? riderImageUrl = ''; // Rider's image URL
+  String? riderVehicleNumber = ''; // Rider's vehicle number
   String? productName = ''; // Product name
   String? productDescription = ''; // Product description
   int? productQuantity; // Product quantity
@@ -33,7 +33,8 @@ class _OrderChatPageState extends State<OrderChatPage> {
   String? imageUrl3;
   bool isDelivering = false; // To check if status is "กำลังจัดส่ง"
 
-  final DatabaseReference _database = FirebaseDatabase.instance.ref(); // Firebase reference
+  final DatabaseReference _database =
+      FirebaseDatabase.instance.ref(); // Firebase reference
 
   @override
   void initState() {
@@ -42,42 +43,40 @@ class _OrderChatPageState extends State<OrderChatPage> {
     _fetchOrderDetails();
   }
 
-  // Function to get the current location of the user
   Future<void> _getCurrentLocation() async {
-    Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+    Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high);
     setState(() {
       _currentLocation = LatLng(position.latitude, position.longitude);
     });
   }
 
-  // Fetch order details including status and images from Firebase
   Future<void> _fetchOrderDetails() async {
     final snapshot = await _database.child('orders/${widget.orderId}').get();
     if (snapshot.exists) {
-      Map<String, dynamic> orderData = Map<String, dynamic>.from(snapshot.value as Map);
-      
-      String sellerPhone = orderData['seller'] ?? 'Unknown'; 
-      
-      // ดึงข้อมูลผู้ขายจาก users
+      Map<String, dynamic> orderData =
+          Map<String, dynamic>.from(snapshot.value as Map);
+
+      String sellerPhone = orderData['seller'] ?? 'Unknown';
       final sellerSnapshot = await _database.child('users/$sellerPhone').get();
       if (sellerSnapshot.exists) {
-        Map<String, dynamic> sellerData = Map<String, dynamic>.from(sellerSnapshot.value as Map);
-        
+        Map<String, dynamic> sellerData =
+            Map<String, dynamic>.from(sellerSnapshot.value as Map);
+
         setState(() {
-          sellerName = sellerData['name'] ?? 'Unknown Seller'; 
-          this.sellerPhone = sellerPhone; 
+          sellerName = sellerData['name'] ?? 'Unknown Seller';
+          this.sellerPhone = sellerPhone;
           sellerImageUrl = sellerData['imageUrl'];
 
-          // Rider details
           riderName = orderData['riderName'] ?? 'No Rider Yet';
           riderPhone = orderData['riderPhone'] ?? '';
 
-          // ดึงข้อมูลไรเดอร์จาก users ถ้ามี
           if (riderPhone != null && riderPhone!.isNotEmpty) {
             final riderSnapshot = _database.child('users/$riderPhone').get();
             riderSnapshot.then((snapshot) {
               if (snapshot.exists) {
-                Map<String, dynamic> riderData = Map<String, dynamic>.from(snapshot.value as Map);
+                Map<String, dynamic> riderData =
+                    Map<String, dynamic>.from(snapshot.value as Map);
                 setState(() {
                   riderImageUrl = riderData['imageUrl'];
                   riderVehicleNumber = riderData['vehicleNumber'];
@@ -86,20 +85,18 @@ class _OrderChatPageState extends State<OrderChatPage> {
             });
           }
 
-          // Product details
           productName = orderData['name'];
           productDescription = orderData['description'];
           productQuantity = orderData['quantity'];
           productImageUrl = orderData['imageUrl'];
 
-          // Shipment status and images
-          _shopLocation = LatLng(orderData['sellerLocation']['latitude'], orderData['sellerLocation']['longitude']);
+          _shopLocation = LatLng(orderData['sellerLocation']['latitude'],
+              orderData['sellerLocation']['longitude']);
           status = orderData['status'] ?? 'Unknown Status';
           imageUrl1 = orderData['imageUrl1'];
           imageUrl2 = orderData['imageUrl2'];
           imageUrl3 = orderData['imageUrl3'];
 
-          // Check if the status is "กำลังจัดส่ง"
           if (status == 'กำลังจัดส่ง') {
             isDelivering = true;
             _listenForRiderLocation();
@@ -109,13 +106,17 @@ class _OrderChatPageState extends State<OrderChatPage> {
     }
   }
 
-  // ฟังการเปลี่ยนแปลงตำแหน่งไรเดอร์แบบเรียลไทม์
   void _listenForRiderLocation() {
-    _database.child('orders/${widget.orderId}/riderLocation').onValue.listen((event) {
+    _database
+        .child('orders/${widget.orderId}/riderLocation')
+        .onValue
+        .listen((event) {
       if (event.snapshot.exists) {
-        Map<String, dynamic> locationData = Map<String, dynamic>.from(event.snapshot.value as Map);
+        Map<String, dynamic> locationData =
+            Map<String, dynamic>.from(event.snapshot.value as Map);
         setState(() {
-          _riderLocation = LatLng(locationData['latitude'], locationData['longitude']);
+          _riderLocation =
+              LatLng(locationData['latitude'], locationData['longitude']);
         });
       }
     });
@@ -130,19 +131,23 @@ class _OrderChatPageState extends State<OrderChatPage> {
       ),
       body: Column(
         children: [
-          _buildMap(),  // Display map
-          Text('Current Status: $status', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)), // Show current status
-          Expanded(child: _buildStatusAndImages()),  // Make the status scrollable
+          _buildMap(),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text('สถานะปัจจุบัน: $status',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ),
+          Expanded(child: _buildStatusAndImages()),
         ],
       ),
     );
   }
 
-  // Build the Map widget
   Widget _buildMap() {
     return Container(
-      height: 300,
-      child: _currentLocation == null || (_shopLocation == null && _riderLocation == null)
+      height: 250,
+      child: _currentLocation == null ||
+              (_shopLocation == null && _riderLocation == null)
           ? Center(child: CircularProgressIndicator())
           : FlutterMap(
               options: MapOptions(
@@ -151,7 +156,8 @@ class _OrderChatPageState extends State<OrderChatPage> {
               ),
               children: [
                 TileLayer(
-                  urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                  urlTemplate:
+                      "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
                   subdomains: ['a', 'b', 'c'],
                 ),
                 MarkerLayer(
@@ -160,21 +166,24 @@ class _OrderChatPageState extends State<OrderChatPage> {
                       width: 80.0,
                       height: 80.0,
                       point: _currentLocation!,
-                      builder: (ctx) => Icon(Icons.location_pin, color: Colors.blue, size: 40),
+                      builder: (ctx) => Icon(Icons.location_pin,
+                          color: Colors.blue, size: 40),
                     ),
                     if (isDelivering && _riderLocation != null)
                       Marker(
                         width: 80.0,
                         height: 80.0,
                         point: _riderLocation!,
-                        builder: (ctx) => Icon(Icons.delivery_dining, color: Colors.orange, size: 40),
+                        builder: (ctx) => Icon(Icons.delivery_dining,
+                            color: Colors.orange, size: 40),
                       )
                     else if (_shopLocation != null)
                       Marker(
                         width: 80.0,
                         height: 80.0,
                         point: _shopLocation!,
-                        builder: (ctx) => Icon(Icons.store, color: Colors.green, size: 40),
+                        builder: (ctx) =>
+                            Icon(Icons.store, color: Colors.green, size: 40),
                       ),
                   ],
                 ),
@@ -183,29 +192,29 @@ class _OrderChatPageState extends State<OrderChatPage> {
     );
   }
 
-  // Build the status and images consecutively
   Widget _buildStatusAndImages() {
-    return SingleChildScrollView(  
+    return SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Display seller details
-            if (sellerName != null) _buildContactInfo('Seller', sellerName, sellerPhone),
-            if (sellerImageUrl != null && sellerImageUrl!.isNotEmpty) 
-              Image.network(sellerImageUrl!, height: 150, width: double.infinity, fit: BoxFit.cover),
-
+            Text('รายละเอียดคนขาย',
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green)),
+            if (sellerName != null)
+              _buildContactInfo('ผู้ขาย', sellerName, sellerPhone),
+            if (sellerImageUrl != null && sellerImageUrl!.isNotEmpty)
+              _buildImageCard(sellerImageUrl!),
             SizedBox(height: 20),
-
-            // Display rider details in every status (if data exists)
-            if (riderName != null && riderName!.isNotEmpty && riderPhone != null && riderPhone!.isNotEmpty)
+            if (riderName != null &&
+                riderName!.isNotEmpty &&
+                riderPhone != null &&
+                riderPhone!.isNotEmpty)
               _buildRiderInfo(),
-
-            // Display product details
             _buildProductDetails(),
-
-            // Display each status and the corresponding image if available
             if (imageUrl1 != null && imageUrl1!.isNotEmpty)
               _buildStatusImage('รอไรเดอร์รับงาน', imageUrl1),
             if (imageUrl2 != null && imageUrl2!.isNotEmpty)
@@ -218,68 +227,94 @@ class _OrderChatPageState extends State<OrderChatPage> {
     );
   }
 
-  // Helper widget to build the image associated with a status
-  Widget _buildStatusImage(String label, String? imageUrl) {
-    if (imageUrl == null || imageUrl.isEmpty) {
-      return Container(); // ไม่แสดงถ้าไม่มีรูปภาพ
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        SizedBox(height: 10),
-        Image.network(imageUrl, height: 150, width: double.infinity, fit: BoxFit.cover),
-        SizedBox(height: 20),
-      ],
-    );
-  }
-
-  // Helper widget to display contact information
   Widget _buildContactInfo(String role, String? name, String? phone) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('$role Name: $name', style: TextStyle(fontSize: 16)),
-        Text('$role Phone: $phone', style: TextStyle(fontSize: 16)),
-        SizedBox(height: 10),
-      ],
+    return Card(
+      elevation: 2.0,
+      margin: EdgeInsets.symmetric(vertical: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('$role: $name', style: TextStyle(fontSize: 16)),
+            Text('โทร: $phone', style: TextStyle(fontSize: 16)),
+          ],
+        ),
+      ),
     );
   }
 
-  // Helper widget to display product details
   Widget _buildProductDetails() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Product Details', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        SizedBox(height: 10),
-        if (productName != null) Text('Name: $productName', style: TextStyle(fontSize: 16)),
-        if (productDescription != null) Text('Description: $productDescription', style: TextStyle(fontSize: 16)),
-        if (productQuantity != null) Text('Quantity: $productQuantity', style: TextStyle(fontSize: 16)),
-        if (productImageUrl != null)
-          Image.network(productImageUrl!, height: 150, width: double.infinity, fit: BoxFit.cover),
-        SizedBox(height: 20),
-      ],
+    return Card(
+      elevation: 2.0,
+      margin: EdgeInsets.symmetric(vertical: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('รายละเอียดสินค้า',
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green)),
+            SizedBox(height: 10),
+            if (productName != null)
+              Text('ชื่อสินค้า: $productName', style: TextStyle(fontSize: 16)),
+            if (productDescription != null)
+              Text('รายละเอียด: $productDescription',
+                  style: TextStyle(fontSize: 16)),
+            if (productQuantity != null)
+              Text('จำนวน: $productQuantity', style: TextStyle(fontSize: 16)),
+            if (productImageUrl != null) _buildImageCard(productImageUrl!),
+          ],
+        ),
+      ),
     );
   }
 
-  // Helper widget to build the rider's information
+  Widget _buildImageCard(String imageUrl) {
+    return Card(
+      elevation: 2.0,
+      margin: EdgeInsets.symmetric(vertical: 10),
+      child: Image.network(imageUrl,
+          height: 150, width: double.infinity, fit: BoxFit.cover),
+    );
+  }
+
   Widget _buildRiderInfo() {
-    if (riderName != null && riderName!.isNotEmpty) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Rider Name: $riderName', style: TextStyle(fontSize: 16)),
-          Text('Rider Phone: $riderPhone', style: TextStyle(fontSize: 16)),
-          if (riderVehicleNumber != null && riderVehicleNumber!.isNotEmpty)
-            Text('Vehicle Number: $riderVehicleNumber', style: TextStyle(fontSize: 16)),
-          if (riderImageUrl != null)
-            Image.network(riderImageUrl!, height: 150, width: double.infinity, fit: BoxFit.cover),
-          SizedBox(height: 10),
-        ],
-      );
-    } else {
-      return Container(); // ไม่แสดงถ้าไม่มีข้อมูลไรเดอร์
-    }
+    return Card(
+      elevation: 2.0,
+      margin: EdgeInsets.symmetric(vertical: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('ข้อมูลไรเดอร์',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            SizedBox(height: 10),
+            Text('ชื่อ: $riderName', style: TextStyle(fontSize: 16)),
+            Text('โทร: $riderPhone', style: TextStyle(fontSize: 16)),
+            if (riderVehicleNumber != null)
+              Text('หมายเลขรถ: $riderVehicleNumber',
+                  style: TextStyle(fontSize: 16)),
+            if (riderImageUrl != null) _buildImageCard(riderImageUrl!),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusImage(String label, String? imageUrl) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        SizedBox(height: 10),
+        _buildImageCard(imageUrl!),
+      ],
+    );
   }
 }

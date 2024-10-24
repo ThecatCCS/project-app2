@@ -421,7 +421,7 @@ void _updateOrderStatus(String orderId) async {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'รายละเอียดงาน',
+                            ' ',
                             style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                           ),
                           IconButton(
@@ -451,14 +451,14 @@ void _updateOrderStatus(String orderId) async {
                         'รายละเอียด: ${order['description']}',
                         style: TextStyle(fontSize: 16),
                       ),
-                      SizedBox(height: 10),
+                
 
                       // จำนวน
                       Text(
                         'จำนวน: ${order['quantity']}',
                         style: TextStyle(fontSize: 16),
                       ),
-                      SizedBox(height: 20),
+                  
 
                       // ข้อมูลผู้ซื้อและผู้ขาย
                       Text(

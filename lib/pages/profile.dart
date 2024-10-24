@@ -214,13 +214,42 @@ class _ProfilePageState extends State<ProfilePage> {
             SizedBox(height: 20),
 
             // Save Button
-            ElevatedButton(
-              onPressed: updateUserProfile,
-              child: Text('บันทึก'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-              ),
+           ElevatedButton(
+  onPressed: () {
+    // Show confirmation dialog
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('ยืนยันการบันทึก'),
+          content: Text('คุณแน่ใจหรือว่าต้องการบันทึกการเปลี่ยนแปลง?'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                // Close the dialog and do nothing
+                Navigator.of(context).pop();
+              },
+              child: Text('ยกเลิก'),
             ),
+            TextButton(
+              onPressed: () {
+                // Close the dialog and call the updateUserProfile function
+                Navigator.of(context).pop();
+                updateUserProfile();
+              },
+              child: Text('ยืนยัน'),
+            ),
+          ],
+        );
+      },
+    );
+  },
+  child: Text('บันทึก'),
+  style: ElevatedButton.styleFrom(
+    backgroundColor: Colors.green,
+  ),
+),
+
           ],
         ),
       ),
