@@ -199,6 +199,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
   String? buyerAddress;
 
   final DatabaseReference _database = FirebaseDatabase.instance.ref(); // Firebase reference
+  bool isLoading = true; // Loading state
 
   @override
   void initState() {
@@ -206,49 +207,44 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
     fetchSellerAndBuyerDetails();
   }
 
-  // Fetch seller and buyer details from the 'users' node
- // Fetch seller and buyer details from the 'users' node
-Future<void> fetchSellerAndBuyerDetails() async {
-  final sellerPhone = widget.order['seller'];
-  final buyerPhone = widget.order['buyer'];
+  Future<void> fetchSellerAndBuyerDetails() async {
+    final sellerPhone = widget.order['seller'];
+    final buyerPhone = widget.order['buyer'];
 
-  // Check if sellerPhone is not null
-  if (sellerPhone != null && sellerPhone.isNotEmpty) {
-    final sellerSnapshot = await _database.child('users/$sellerPhone').get();
-    if (sellerSnapshot.exists) {
-      Map<String, dynamic> sellerData = Map<String, dynamic>.from(sellerSnapshot.value as Map);
-      setState(() {
-        sellerName = sellerData['name'];
-        this.sellerPhone = sellerPhone;
-        sellerImageUrl = sellerData['imageUrl'];
-        sellerAddress = sellerData['address'];
-      });
-    } else {
-      print('Seller data not found for phone: $sellerPhone');
+    if (sellerPhone != null && sellerPhone.isNotEmpty) {
+      final sellerSnapshot = await _database.child('users/$sellerPhone').get();
+      if (sellerSnapshot.exists) {
+        Map<String, dynamic> sellerData = Map<String, dynamic>.from(sellerSnapshot.value as Map);
+        setState(() {
+          sellerName = sellerData['name'];
+          this.sellerPhone = sellerPhone;
+          sellerImageUrl = sellerData['imageUrl'];
+          sellerAddress = sellerData['address'];
+          isLoading = false; // Stop loading when data is fetched
+        });
+      } else {
+        print('Seller data not found for phone: $sellerPhone');
+        setState(() => isLoading = false); // Stop loading
+      }
     }
-  } else {
-    print('Seller phone is null or empty');
-  }
 
-  // Check if buyerPhone is not null
-  if (buyerPhone != null && buyerPhone.isNotEmpty) {
-    final buyerSnapshot = await _database.child('users/$buyerPhone').get();
-    if (buyerSnapshot.exists) {
-      Map<String, dynamic> buyerData = Map<String, dynamic>.from(buyerSnapshot.value as Map);
-      setState(() {
-        buyerName = buyerData['name'];
-        this.buyerPhone = buyerPhone;
-        buyerImageUrl = buyerData['imageUrl'];
-        buyerAddress = buyerData['address'];
-      });
-    } else {
-      print('Buyer data not found for phone: $buyerPhone');
+    if (buyerPhone != null && buyerPhone.isNotEmpty) {
+      final buyerSnapshot = await _database.child('users/$buyerPhone').get();
+      if (buyerSnapshot.exists) {
+        Map<String, dynamic> buyerData = Map<String, dynamic>.from(buyerSnapshot.value as Map);
+        setState(() {
+          buyerName = buyerData['name'];
+          this.buyerPhone = buyerPhone;
+          buyerImageUrl = buyerData['imageUrl'];
+          buyerAddress = buyerData['address'];
+          isLoading = false; // Stop loading when data is fetched
+        });
+      } else {
+        print('Buyer data not found for phone: $buyerPhone');
+        setState(() => isLoading = false); // Stop loading
+      }
     }
-  } else {
-    print('Buyer phone is null or empty');
   }
-}
-
 
   @override
   Widget build(BuildContext context) {
@@ -257,62 +253,101 @@ Future<void> fetchSellerAndBuyerDetails() async {
         title: Text('รายละเอียดออเดอร์'),
         backgroundColor: Color.fromARGB(255, 75, 161, 72),
       ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(16),
+      body: isLoading
+          ? Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Menu image
+                  if (widget.order['imageUrl'] != null)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.network(widget.order['imageUrl'], height: 200, width: double.infinity, fit: BoxFit.cover),
+                    ),
+                  SizedBox(height: 20),
+
+                  // Menu name
+                  _buildMenuInfo(),
+                  SizedBox(height: 20),
+
+                  // Seller information
+                  _buildUserInfoCard('ข้อมูลผู้ขาย', sellerImageUrl, sellerName, sellerPhone, sellerAddress),
+                  SizedBox(height: 20),
+
+                  // Buyer information
+                  _buildUserInfoCard('ข้อมูลผู้ซื้อ', buyerImageUrl, buyerName, buyerPhone, buyerAddress),
+                ],
+              ),
+            ),
+    );
+  }
+
+  Widget _buildMenuInfo() {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // รูปเมนู
-            if (widget.order['imageUrl'] != null)
-              Image.network(widget.order['imageUrl'], height: 200, width: double.infinity, fit: BoxFit.cover),
-            SizedBox(height: 20),
-
-            // ชื่อเมนู
             Text(
               'ชื่อเมนู: ${widget.order['name']}',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 10),
-
-            // รายละเอียด
             Text(
               'รายละเอียด: ${widget.order['description']}',
               style: TextStyle(fontSize: 16),
             ),
             SizedBox(height: 10),
-
-            // จำนวน
             Text(
               'จำนวน: ${widget.order['quantity']}',
               style: TextStyle(fontSize: 16),
             ),
-            SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
 
-            // ข้อมูลผู้ขาย
-            Text(
-              'ข้อมูลผู้ขาย',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+  Widget _buildUserInfoCard(String title, String? imageUrl, String? name, String? phone, String? address) {
+    return Card(
+      elevation: 8,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                if (imageUrl != null)
+                  ClipOval(
+                    child: Image.network(
+                      imageUrl,
+                      height: 70,
+                      width: 70,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      SizedBox(height: 8),
+                      Text('ชื่อ: ${name ?? 'ไม่ระบุ'}', style: TextStyle(fontSize: 16)),
+                      Text('เบอร์: ${phone ?? 'ไม่ระบุ'}', style: TextStyle(fontSize: 16)),
+                      Text('ที่อยู่: ${address ?? 'ไม่ระบุ'}', style: TextStyle(fontSize: 16)),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            SizedBox(height: 10),
-            if (sellerImageUrl != null)
-              Image.network(sellerImageUrl!, height: 100, width: 100, fit: BoxFit.cover),
-            Text('ชื่อ: $sellerName'),
-            Text('เบอร์: $sellerPhone'),
-            Text('ที่อยู่: $sellerAddress'),
-            SizedBox(height: 20),
-
-            // ข้อมูลผู้ซื้อ
-            Text(
-              'ข้อมูลผู้ซื้อ',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 10),
-            if (buyerImageUrl != null)
-              Image.network(buyerImageUrl!, height: 100, width: 100, fit: BoxFit.cover),
-            Text('ชื่อ: $buyerName'),
-            Text('เบอร์: $buyerPhone'),
-            Text('ที่อยู่: $buyerAddress'),
-            SizedBox(height: 20),
           ],
         ),
       ),

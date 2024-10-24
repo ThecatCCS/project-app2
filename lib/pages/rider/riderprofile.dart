@@ -118,16 +118,51 @@ class _RiderProfilePageState extends State<RiderProfilePage> {
               SizedBox(height: 20),
 
               // ปุ่มบันทึกข้อมูล
-              ElevatedButton(
-                onPressed: _saveRiderInfo, // เรียกฟังก์ชันบันทึกข้อมูล
-                child: Text(
-                  'Save',
-                  style: TextStyle(color: Colors.white),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                ),
-              ),
+             ElevatedButton(
+  onPressed: () {
+    // Show confirmation dialog
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('บันทึกข้อมูล'),
+          content: Text('ยืนยันการบันทึกหรือไม่?'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                // Close the dialog without saving
+                Navigator.of(context).pop();
+              },
+              child: Text('Cancel',
+              style: TextStyle(
+                color: Colors.green
+              ),),
+            ),
+            TextButton(
+              onPressed: () {
+                // Close the dialog and call the _saveRiderInfo function
+                Navigator.of(context).pop();
+                _saveRiderInfo();
+              },
+              child: Text('Confirm',
+              style: TextStyle(
+                color: Colors.green
+              ),),
+            ),
+          ],
+        );
+      },
+    );
+  },
+  child: Text(
+    'Save',
+    style: TextStyle(color: Colors.white),
+  ),
+  style: ElevatedButton.styleFrom(
+    backgroundColor: Colors.green,
+  ),
+),
+
             ],
           ),
         ),
