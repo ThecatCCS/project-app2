@@ -52,73 +52,64 @@ class _OrderChatPageState extends State<OrderChatPage> {
 
   // Fetch order details including status and images from Firebase
   Future<void> _fetchOrderDetails() async {
-  final snapshot = await _database.child('orders/${widget.orderId}').get();
-  if (snapshot.exists) {
-    Map<String, dynamic> orderData = Map<String, dynamic>.from(snapshot.value as Map);
-    
-    // ใช้ sellerPhone เป็นตัวเก็บข้อมูลที่ดึงมาจาก orderData
-    String sellerPhone = orderData['seller'] ?? 'Unknown'; 
-    
-    // ดึงข้อมูลผู้ขายจาก users
-    final sellerSnapshot = await _database.child('users/$sellerPhone').get();
-    if (sellerSnapshot.exists) {
-      Map<String, dynamic> sellerData = Map<String, dynamic>.from(sellerSnapshot.value as Map);
+    final snapshot = await _database.child('orders/${widget.orderId}').get();
+    if (snapshot.exists) {
+      Map<String, dynamic> orderData = Map<String, dynamic>.from(snapshot.value as Map);
       
-      setState(() async {
-        // ดึงข้อมูลของผู้ขาย
-        sellerName = sellerData['name'] ?? 'Unknown Seller'; // ชื่อผู้ขายจาก users
-        this.sellerPhone = sellerPhone; // เบอร์โทรผู้ขาย
-        sellerImageUrl = sellerData['imageUrl']; // รูปภาพของผู้ขาย
+      String sellerPhone = orderData['seller'] ?? 'Unknown'; 
+      
+      // ดึงข้อมูลผู้ขายจาก users
+      final sellerSnapshot = await _database.child('users/$sellerPhone').get();
+      if (sellerSnapshot.exists) {
+        Map<String, dynamic> sellerData = Map<String, dynamic>.from(sellerSnapshot.value as Map);
+        
+        setState(() {
+          sellerName = sellerData['name'] ?? 'Unknown Seller'; 
+          this.sellerPhone = sellerPhone; 
+          sellerImageUrl = sellerData['imageUrl'];
 
-        // Rider details
-        riderName = orderData['riderName'] ?? 'No Rider Yet';
-        riderPhone = orderData['riderPhone'] ?? '';
+          // Rider details
+          riderName = orderData['riderName'] ?? 'No Rider Yet';
+          riderPhone = orderData['riderPhone'] ?? '';
 
-        // **เพิ่มโค้ดเพื่อดึงข้อมูลไรเดอร์จาก users**
-        if (riderPhone != null && riderPhone!.isNotEmpty) {
-          // ดึงข้อมูลผู้ส่ง (ไรเดอร์) จาก users โดยใช้ riderPhone
-          final riderSnapshot = await _database.child('users/$riderPhone').get();
-          if (riderSnapshot.exists) {
-            Map<String, dynamic> riderData = Map<String, dynamic>.from(riderSnapshot.value as Map);
-            
-            setState(() {
-              riderImageUrl = riderData['imageUrl']; // รูปภาพของไรเดอร์
-              riderVehicleNumber = riderData['vehicleNumber']; // หมายเลขป้ายทะเบียนรถของไรเดอร์
+          // ดึงข้อมูลไรเดอร์จาก users ถ้ามี
+          if (riderPhone != null && riderPhone!.isNotEmpty) {
+            final riderSnapshot = _database.child('users/$riderPhone').get();
+            riderSnapshot.then((snapshot) {
+              if (snapshot.exists) {
+                Map<String, dynamic> riderData = Map<String, dynamic>.from(snapshot.value as Map);
+                setState(() {
+                  riderImageUrl = riderData['imageUrl'];
+                  riderVehicleNumber = riderData['vehicleNumber'];
+                });
+              }
             });
-          } else {
-            print('Rider not found in users.');
           }
-        }
 
-        // Product details
-        productName = orderData['name'];
-        productDescription = orderData['description'];
-        productQuantity = orderData['quantity'];
-        productImageUrl = orderData['imageUrl'];
+          // Product details
+          productName = orderData['name'];
+          productDescription = orderData['description'];
+          productQuantity = orderData['quantity'];
+          productImageUrl = orderData['imageUrl'];
 
-        // Shipment status and images
-        _shopLocation = LatLng(orderData['sellerLocation']['latitude'], orderData['sellerLocation']['longitude']);
-        status = orderData['status'] ?? 'Unknown Status';
-        imageUrl1 = orderData['imageUrl1'];
-        imageUrl2 = orderData['imageUrl2'];
-        imageUrl3 = orderData['imageUrl3'];
+          // Shipment status and images
+          _shopLocation = LatLng(orderData['sellerLocation']['latitude'], orderData['sellerLocation']['longitude']);
+          status = orderData['status'] ?? 'Unknown Status';
+          imageUrl1 = orderData['imageUrl1'];
+          imageUrl2 = orderData['imageUrl2'];
+          imageUrl3 = orderData['imageUrl3'];
 
-        // Check if the status is "กำลังจัดส่ง" (Delivering)
-        if (status == 'กำลังจัดส่ง') {
-          isDelivering = true;
-          _listenForRiderLocation(); // Start real-time location updates for the rider
-        }
-      });
-    } else {
-      print('Seller not found in users.');
+          // Check if the status is "กำลังจัดส่ง"
+          if (status == 'กำลังจัดส่ง') {
+            isDelivering = true;
+            _listenForRiderLocation();
+          }
+        });
+      }
     }
-  } else {
-    print('Order not found or has no data.');
   }
-}
 
-
-  // Listen for rider's real-time location updates from Firebase
+  // ฟังการเปลี่ยนแปลงตำแหน่งไรเดอร์แบบเรียลไทม์
   void _listenForRiderLocation() {
     _database.child('orders/${widget.orderId}/riderLocation').onValue.listen((event) {
       if (event.snapshot.exists) {
@@ -140,6 +131,7 @@ class _OrderChatPageState extends State<OrderChatPage> {
       body: Column(
         children: [
           _buildMap(),  // Display map
+          Text('Current Status: $status', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)), // Show current status
           Expanded(child: _buildStatusAndImages()),  // Make the status scrollable
         ],
       ),
@@ -164,14 +156,12 @@ class _OrderChatPageState extends State<OrderChatPage> {
                 ),
                 MarkerLayer(
                   markers: [
-                    // Marker for user's current location
                     Marker(
                       width: 80.0,
                       height: 80.0,
                       point: _currentLocation!,
                       builder: (ctx) => Icon(Icons.location_pin, color: Colors.blue, size: 40),
                     ),
-                    // If the rider is delivering, show the rider's real-time location; otherwise, show the shop's location
                     if (isDelivering && _riderLocation != null)
                       Marker(
                         width: 80.0,
@@ -195,7 +185,7 @@ class _OrderChatPageState extends State<OrderChatPage> {
 
   // Build the status and images consecutively
   Widget _buildStatusAndImages() {
-    return SingleChildScrollView(  // Make content scrollable to avoid overflow
+    return SingleChildScrollView(  
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -215,10 +205,13 @@ class _OrderChatPageState extends State<OrderChatPage> {
             // Display product details
             _buildProductDetails(),
 
-            // Display each status and the corresponding image
-            _buildStatusImage('รอไรเดอร์รับงาน', imageUrl1),
-            _buildStatusImage('กำลังจัดส่ง', imageUrl2),
-            _buildStatusImage('จัดส่งสำเร็จ', imageUrl3),
+            // Display each status and the corresponding image if available
+            if (imageUrl1 != null && imageUrl1!.isNotEmpty)
+              _buildStatusImage('รอไรเดอร์รับงาน', imageUrl1),
+            if (imageUrl2 != null && imageUrl2!.isNotEmpty)
+              _buildStatusImage('กำลังจัดส่ง', imageUrl2),
+            if (imageUrl3 != null && imageUrl3!.isNotEmpty)
+              _buildStatusImage('จัดส่งสำเร็จ', imageUrl3),
           ],
         ),
       ),
@@ -227,14 +220,15 @@ class _OrderChatPageState extends State<OrderChatPage> {
 
   // Helper widget to build the image associated with a status
   Widget _buildStatusImage(String label, String? imageUrl) {
+    if (imageUrl == null || imageUrl.isEmpty) {
+      return Container(); // ไม่แสดงถ้าไม่มีรูปภาพ
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         SizedBox(height: 10),
-        imageUrl != null
-            ? Image.network(imageUrl, height: 150, width: double.infinity, fit: BoxFit.cover)
-            : Text('No image available for this status.'),
+        Image.network(imageUrl, height: 150, width: double.infinity, fit: BoxFit.cover),
         SizedBox(height: 20),
       ],
     );
