@@ -19,8 +19,11 @@ class _OrderChatPageState extends State<OrderChatPage> {
   String status = ''; // Shipment status
   String? sellerName = ''; // Seller's name
   String? sellerPhone = ''; // Seller's phone number
+  String? sellerImageUrl = ''; // Seller's image URL 
   String? riderName = ''; // Rider's name
   String? riderPhone = ''; // Rider's phone number
+  String? riderImageUrl = ''; // Rider's image URL 
+  String? riderVehicleNumber = ''; // Rider's vehicle number 
   String? productName = ''; // Product name
   String? productDescription = ''; // Product description
   int? productQuantity; // Product quantity
@@ -53,37 +56,62 @@ class _OrderChatPageState extends State<OrderChatPage> {
   if (snapshot.exists) {
     Map<String, dynamic> orderData = Map<String, dynamic>.from(snapshot.value as Map);
     
-    // เพิ่มการพิมพ์ผลลัพธ์เพื่อตรวจสอบ
-    print('Order Data: $orderData');
+    // ใช้ sellerPhone เป็นตัวเก็บข้อมูลที่ดึงมาจาก orderData
+    String sellerPhone = orderData['seller'] ?? 'Unknown'; 
+    
+    // ดึงข้อมูลผู้ขายจาก users
+    final sellerSnapshot = await _database.child('users/$sellerPhone').get();
+    if (sellerSnapshot.exists) {
+      Map<String, dynamic> sellerData = Map<String, dynamic>.from(sellerSnapshot.value as Map);
+      
+      setState(() async {
+        // ดึงข้อมูลของผู้ขาย
+        sellerName = sellerData['name'] ?? 'Unknown Seller'; // ชื่อผู้ขายจาก users
+        this.sellerPhone = sellerPhone; // เบอร์โทรผู้ขาย
+        sellerImageUrl = sellerData['imageUrl']; // รูปภาพของผู้ขาย
 
-    setState(() {
-      // Seller details
-      sellerName = 'Unknown'; // ไม่ได้มีในข้อมูล, คุณสามารถเพิ่มการดึงข้อมูลเพิ่มเติมหากมีข้อมูลในอนาคต
-      sellerPhone = orderData['seller'] ?? 'Unknown';  // ใช้ seller เป็น phone
+        // Rider details
+        riderName = orderData['riderName'] ?? 'No Rider Yet';
+        riderPhone = orderData['riderPhone'] ?? '';
 
-      // Rider details
-      riderName = orderData['riderName'] ?? 'No Rider Yet';
-      riderPhone = orderData['riderPhone'] ?? '';
+        // **เพิ่มโค้ดเพื่อดึงข้อมูลไรเดอร์จาก users**
+        if (riderPhone != null && riderPhone!.isNotEmpty) {
+          // ดึงข้อมูลผู้ส่ง (ไรเดอร์) จาก users โดยใช้ riderPhone
+          final riderSnapshot = await _database.child('users/$riderPhone').get();
+          if (riderSnapshot.exists) {
+            Map<String, dynamic> riderData = Map<String, dynamic>.from(riderSnapshot.value as Map);
+            
+            setState(() {
+              riderImageUrl = riderData['imageUrl']; // รูปภาพของไรเดอร์
+              riderVehicleNumber = riderData['vehicleNumber']; // หมายเลขป้ายทะเบียนรถของไรเดอร์
+            });
+          } else {
+            print('Rider not found in users.');
+          }
+        }
 
-      // Product details
-      productName = orderData['name'];
-      productDescription = orderData['description'];
-      productQuantity = orderData['quantity'];
-      productImageUrl = orderData['imageUrl'];
+        // Product details
+        productName = orderData['name'];
+        productDescription = orderData['description'];
+        productQuantity = orderData['quantity'];
+        productImageUrl = orderData['imageUrl'];
 
-      // Shipment status and images
-      _shopLocation = LatLng(orderData['sellerLocation']['latitude'], orderData['sellerLocation']['longitude']);
-      status = orderData['status'] ?? 'Unknown Status';
-      imageUrl1 = orderData['imageUrl1'];
-      imageUrl2 = orderData['imageUrl2'];
-      imageUrl3 = orderData['imageUrl3'];
+        // Shipment status and images
+        _shopLocation = LatLng(orderData['sellerLocation']['latitude'], orderData['sellerLocation']['longitude']);
+        status = orderData['status'] ?? 'Unknown Status';
+        imageUrl1 = orderData['imageUrl1'];
+        imageUrl2 = orderData['imageUrl2'];
+        imageUrl3 = orderData['imageUrl3'];
 
-      // Check if the status is "กำลังจัดส่ง" (Delivering)
-      if (status == 'กำลังจัดส่ง') {
-        isDelivering = true;
-        _listenForRiderLocation(); // Start real-time location updates for the rider
-      }
-    });
+        // Check if the status is "กำลังจัดส่ง" (Delivering)
+        if (status == 'กำลังจัดส่ง') {
+          isDelivering = true;
+          _listenForRiderLocation(); // Start real-time location updates for the rider
+        }
+      });
+    } else {
+      print('Seller not found in users.');
+    }
   } else {
     print('Order not found or has no data.');
   }
@@ -173,9 +201,16 @@ class _OrderChatPageState extends State<OrderChatPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Display seller and rider details
+            // Display seller details
             if (sellerName != null) _buildContactInfo('Seller', sellerName, sellerPhone),
-            if (riderName != null && status == 'กำลังจัดส่ง') _buildContactInfo('Rider', riderName, riderPhone),
+            if (sellerImageUrl != null && sellerImageUrl!.isNotEmpty) 
+              Image.network(sellerImageUrl!, height: 150, width: double.infinity, fit: BoxFit.cover),
+
+            SizedBox(height: 20),
+
+            // Display rider details in every status (if data exists)
+            if (riderName != null && riderName!.isNotEmpty && riderPhone != null && riderPhone!.isNotEmpty)
+              _buildRiderInfo(),
 
             // Display product details
             _buildProductDetails(),
@@ -232,5 +267,25 @@ class _OrderChatPageState extends State<OrderChatPage> {
         SizedBox(height: 20),
       ],
     );
+  }
+
+  // Helper widget to build the rider's information
+  Widget _buildRiderInfo() {
+    if (riderName != null && riderName!.isNotEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Rider Name: $riderName', style: TextStyle(fontSize: 16)),
+          Text('Rider Phone: $riderPhone', style: TextStyle(fontSize: 16)),
+          if (riderVehicleNumber != null && riderVehicleNumber!.isNotEmpty)
+            Text('Vehicle Number: $riderVehicleNumber', style: TextStyle(fontSize: 16)),
+          if (riderImageUrl != null)
+            Image.network(riderImageUrl!, height: 150, width: double.infinity, fit: BoxFit.cover),
+          SizedBox(height: 10),
+        ],
+      );
+    } else {
+      return Container(); // ไม่แสดงถ้าไม่มีข้อมูลไรเดอร์
+    }
   }
 }
