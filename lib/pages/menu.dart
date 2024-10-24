@@ -168,11 +168,10 @@ class _MenuPageState extends State<MenuPage> {
         .toList();
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('เมนูอาหาร'),
-      ),
+     
       body: Column(
         children: [
+          SizedBox(height: 20),
           // Search bar
           Container(
             padding: EdgeInsets.all(5),
