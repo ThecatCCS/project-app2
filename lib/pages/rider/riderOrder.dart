@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_image_upload/pages/rider/receiveOrder.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class RiderorderPage extends StatefulWidget {
   @override
@@ -20,18 +20,59 @@ class _RiderorderPageState extends State<RiderorderPage> {
   @override
   void initState() {
     super.initState();
-    loadRiderDetails(); // โหลดข้อมูลไรเดอร์
+    loadRiderDetails(); // โหลดข้อมูลไรเดอร์จาก Realtime Database
     fetchOrders(); // ดึงรายการ orders ที่มีสถานะเป็น "รอไรเดอร์รับงาน"
   }
 
-  // ดึงข้อมูลเบอร์โทรศัพท์และชื่อไรเดอร์จาก SharedPreferences
-  void loadRiderDetails() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    setState(() {
-      phoneNumber = prefs.getString('phone') ?? ''; // ดึงหมายเลขโทรศัพท์ไรเดอร์
-      riderName = prefs.getString('name') ?? ''; // ดึงชื่อไรเดอร์
-    });
+  // ฟังก์ชันดึงข้อมูลเบอร์โทรศัพท์และชื่อไรเดอร์จาก Realtime Database
+// ดึงข้อมูลเบอร์โทรศัพท์และชื่อไรเดอร์จาก Firebase Realtime Database (users node)
+void loadRiderDetails() async {
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  phoneNumber = prefs.getString('phone') ?? '';
+
+  if (phoneNumber.isNotEmpty) {
+    final snapshot = await _database
+        .child('users')
+        .orderByChild('phone')
+        .equalTo(phoneNumber)
+        .limitToFirst(1)
+        .get();
+
+    if (snapshot.exists) {
+      // Ensure data is retrieved properly and handle null cases
+      Map<String, dynamic> userData = Map<String, dynamic>.from((snapshot.value as Map).values.first);
+
+      setState(() {
+        riderName = userData['name'] ?? ''; // Default to empty string if null
+        phoneNumber = userData['phone'] ?? ''; // Default to empty string if null
+      });
+
+      if (riderName.isEmpty || phoneNumber.isEmpty) {
+        // Handle case where either riderName or phoneNumber is empty
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('ข้อมูลไรเดอร์ไม่สมบูรณ์')),
+        );
+        print('Error: Rider name or phone number is empty');
+      } else {
+        print('Phone Number: $phoneNumber');
+        print('Rider Name: $riderName');
+      }
+    } else {
+      print('Error: No rider data found');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('ไม่พบข้อมูลไรเดอร์ในระบบ')),
+      );
+    }
+  } else {
+    print('Error: No phone number provided');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('ไม่พบเบอร์โทรศัพท์ กรุณาลองอีกครั้ง')),
+    );
   }
+}
+
+
+
 
   // ฟังก์ชันดึงข้อมูล orders จาก Firebase เฉพาะที่มีสถานะเป็น "รอไรเดอร์รับงาน"
   void fetchOrders() async {
@@ -306,24 +347,37 @@ class _RiderorderPageState extends State<RiderorderPage> {
   }
 
   // ฟังก์ชันอัปเดตสถานะออเดอร์ใน Firebase
-  void _updateOrderStatus(String orderId) async {
-    try {
-      await _database.child('orders/$orderId').update({
-        'status': 'กำลังไปรับอาหาร', // เปลี่ยนสถานะเป็น "กำลังดำเนินการ"
-        'riderPhone': phoneNumber, // เพิ่มเบอร์โทรศัพท์ไรเดอร์
-        'riderName': riderName, // เพิ่มชื่อไรเดอร์
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('รับงานสำเร็จ!')),
-      );
-      // Refresh the orders after the update
-      fetchOrders();
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('เกิดข้อผิดพลาด: $e')),
-      );
+// ฟังก์ชันอัปเดตสถานะออเดอร์ใน Firebase
+void _updateOrderStatus(String orderId) async {
+  try {
+    // ตรวจสอบค่าก่อนอัปเดตใน Firebase
+    if (riderName.isEmpty || phoneNumber.isEmpty) {
+      throw Exception('Rider name or phone number is empty');
     }
+
+    print('Updating order with riderName: $riderName and riderPhone: $phoneNumber');
+
+    await _database.child('orders/$orderId').update({
+      'status': 'กำลังไปรับอาหาร', // เปลี่ยนสถานะเป็น "กำลังดำเนินการ"
+      'riderPhone': phoneNumber, // เพิ่มเบอร์โทรศัพท์ไรเดอร์
+      'riderName': riderName, // เพิ่มชื่อไรเดอร์
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('รับงานสำเร็จ!')),
+    );
+
+    // Refresh the orders after the update
+    fetchOrders();
+  } catch (e) {
+    print('Error updating order: $e'); // แสดง error message ถ้ามีข้อผิดพลาด
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('เกิดข้อผิดพลาด: $e')),
+    );
   }
+}
+
+
 
   // แสดง Dialog รายละเอียดงาน (แบบเต็มหน้าจอ)
   void _showJobDetailsDialog(BuildContext context, Map<String, dynamic> order) {
