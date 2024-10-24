@@ -238,29 +238,31 @@ class _ReceiveOrderPageState extends State<ReceiveOrderPage> {
           ),
 
           // ข้อมูลผู้ส่งและผู้รับ
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                Column(
-                  children: [
-                    CircleAvatar(radius: 30, child: Icon(Icons.person)),
-                    SizedBox(height: 8),
-                    Text('ไรเดอร์'),
-                  ],
-                ),
-                Icon(Icons.arrow_forward),
-                Column(
-                  children: [
-                    CircleAvatar(radius: 30, child: Icon(Icons.person)),
-                    SizedBox(height: 8),
-                    Text('ลูกค้า'),
-                  ],
-                ),
-              ],
-            ),
-          ),
+          // ข้อมูลผู้ส่งและผู้รับ
+Padding(
+  padding: const EdgeInsets.all(16.0),
+  child: Row(
+    mainAxisAlignment: MainAxisAlignment.spaceAround,
+    children: [
+      Column(
+        children: [
+          CircleAvatar(radius: 30, child: Icon(Icons.person)),
+          SizedBox(height: 8),
+          Text(currentStatus == 'กำลังไปรับอาหาร' ? 'ไรเดอร์' : 'ไรเดอร์'),
+        ],
+      ),
+      Icon(Icons.arrow_forward),
+      Column(
+        children: [
+          CircleAvatar(radius: 30, child: Icon(Icons.person)),
+          SizedBox(height: 8),
+          Text(currentStatus == 'ไรเดอร์กำลังจัดส่ง' ? 'ลูกค้า' : 'ร้านค้า'),
+        ],
+      ),
+    ],
+  ),
+),
+
 
           // สถานะและปุ่มการจัดการ
           Padding(

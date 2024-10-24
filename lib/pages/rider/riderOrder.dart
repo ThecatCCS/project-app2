@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_image_upload/pages/rider/receiveOrder.dart';
 
@@ -12,8 +14,7 @@ class _RiderorderPageState extends State<RiderorderPage> {
   List<Map<String, dynamic>> orders = [];
   String phoneNumber = ''; // เก็บหมายเลขโทรศัพท์ไรเดอร์
   String riderName = ''; // เก็บชื่อไรเดอร์
-  final DatabaseReference _database =
-      FirebaseDatabase.instance.ref(); // Firebase reference
+  final DatabaseReference _database = FirebaseDatabase.instance.ref(); // Firebase reference
   String searchQuery = ''; // Holds the search query
 
   @override
@@ -36,167 +37,191 @@ class _RiderorderPageState extends State<RiderorderPage> {
   void fetchOrders() async {
     final snapshot = await _database.child('orders').get();
     if (snapshot.exists) {
-      List<Map<String, dynamic>> fetchedOrders = [];
-      Map<String, dynamic> data =
-          Map<String, dynamic>.from(snapshot.value as Map);
+      List<Map<String, dynamic>> pendingOrders = [];
+      List<Map<String, dynamic>> availableOrders = [];
+      Map<String, dynamic> data = Map<String, dynamic>.from(snapshot.value as Map);
+
       data.forEach((key, value) {
         Map<String, dynamic> order = Map<String, dynamic>.from(value);
-        // แสดงเฉพาะ orders ที่สถานะเป็น "รอไรเดอร์รับงาน"
-        if (order['status'] == "รอไรเดอร์รับงาน") {
-          order['id'] = key; // เก็บ key ของ order
-          fetchedOrders.add(order);
+
+        // ตรวจสอบว่ามีงานที่ยังไม่เสร็จสำหรับไรเดอร์คนนี้หรือไม่
+        if (order['status'] != "จัดส่งสำเร็จ" && order['riderPhone'] == phoneNumber) {
+          order['id'] = key; // เก็บ key ของ order ที่ยังไม่เสร็จ
+          pendingOrders.add(order);
+        } 
+        // ถ้าไม่มีงานค้าง ก็จะเป็นงานที่ไรเดอร์สามารถรับได้ตามปกติ
+        else if (order['status'] == "รอไรเดอร์รับงาน") {
+          order['id'] = key; // เก็บ key ของ order ที่สามารถรับได้
+          availableOrders.add(order);
         }
       });
+
       setState(() {
-        orders = fetchedOrders; // เก็บรายการ orders ที่ดึงมา
+        orders = pendingOrders.isNotEmpty ? pendingOrders : availableOrders;
       });
+
+      // ถ้ามีงานค้างอยู่ ให้ไปยังหน้า ReceiveOrderPage โดยอัตโนมัติ
+      if (pendingOrders.isNotEmpty) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ReceiveOrderPage(orderId: pendingOrders[0]['id']), // ส่ง orderId ที่ยังไม่เสร็จ
+          ),
+        );
+      }
     }
+  }
+
+  // ฟิลเตอร์รายการ order ตาม search query
+  List<Map<String, dynamic>> getFilteredOrders() {
+    return orders.where((item) =>
+        item['name'].toLowerCase().contains(searchQuery.toLowerCase()) ||
+        item['description'].toLowerCase().contains(searchQuery.toLowerCase())
+    ).toList();
+  }
+
+  // Widget สำหรับแสดงช่องค้นหา
+  Widget buildSearchBar() {
+    return Container(
+      padding: EdgeInsets.all(5),
+      margin: EdgeInsets.only(top: 30, left: 10, right: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: Color.fromARGB(255, 75, 161, 72),
+          width: 3,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              onChanged: (value) {
+                setState(() {
+                  searchQuery = value; // อัปเดต search query
+                });
+              },
+              decoration: InputDecoration(
+                hintText: 'ค้นหา',
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.only(left: 15),
+              ),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          Icon(Icons.search, color: Color.fromARGB(255, 75, 161, 72)),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // ฟิลเตอร์รายการ order ตาม search query
-    List<Map<String, dynamic>> filteredOrders = orders
-        .where((item) =>
-            item['name'].toLowerCase().contains(searchQuery.toLowerCase()) ||
-            item['description']
-                .toLowerCase()
-                .contains(searchQuery.toLowerCase()))
-        .toList();
+    // ใช้ฟังก์ชันกรอง orders ที่ตรงกับ searchQuery
+    List<Map<String, dynamic>> filteredOrders = getFilteredOrders();
 
     return Scaffold(
       body: Column(
         children: [
-          // Search bar
-          Container(
-            padding: EdgeInsets.all(5),
-            margin: EdgeInsets.only(top: 30, left: 10, right: 10),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: Color.fromARGB(255, 75, 161, 72),
-                width: 3,
+          buildSearchBar(), // เพิ่มช่องค้นหา
+          if (orders.isEmpty)
+            Center(
+              child: Text(
+                'ไม่มีงานค้าง',
+                style: TextStyle(fontSize: 18),
+              ),
+            )
+          else
+            Expanded(
+              child: ListView.builder(
+                itemCount: filteredOrders.length,
+                itemBuilder: (context, index) {
+                  final order = filteredOrders[index];
+                  return Card(
+                    margin: EdgeInsets.symmetric(vertical: 5, horizontal: 5),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          // Image
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8.0), // กำหนดขอบมน
+                            child: Image.network(
+                              order['imageUrl'],
+                              width: 80,
+                              height: 80,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                          SizedBox(width: 10),
+                          // Textual content
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      order['name'],
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    Icon(
+                                      Icons.access_time,
+                                      size: 36.0, // ขนาดของไอคอน
+                                      color: const Color.fromARGB(255, 209, 167, 0), // สีของไอคอน
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: 30),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    GestureDetector(
+                                      onTap: () => _showConfirmationDialog(context, order),
+                                      child: Text(
+                                        'กดรับงาน',
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            decoration: TextDecoration.underline,
+                                            color: Colors.green,
+                                            decorationColor: Colors.green),
+                                      ),
+                                    ),
+                                    GestureDetector(
+                                      onTap: () => _showJobDetailsDialog(context, order),
+                                      child: Text(
+                                        'ดูรายละเอียดงาน',
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            decoration: TextDecoration.underline,
+                                            color: Colors.green,
+                                            decorationColor: Colors.green),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    onChanged: (value) {
-                      setState(() {
-                        searchQuery = value; // อัปเดต search query
-                      });
-                    },
-                    decoration: InputDecoration(
-                      hintText: 'ค้นหา',
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.only(left: 15),
-                    ),
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                Icon(Icons.search, color: Color.fromARGB(255, 75, 161, 72)),
-              ],
-            ),
-          ),
-
-          // Order List
-          Expanded(
-            child: ListView.builder(
-              itemCount: filteredOrders.length,
-              itemBuilder: (context, index) {
-                final order = filteredOrders[index];
-                return Card(
-                  margin: EdgeInsets.symmetric(vertical: 5, horizontal: 5),
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // Image
-                        ClipRRect(
-                          borderRadius:
-                              BorderRadius.circular(8.0), // กำหนดขอบมน
-                          child: Image.network(
-                            order['imageUrl'],
-                            width: 80,
-                            height: 80,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                        SizedBox(width: 10),
-                        // Textual content
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    order['name'],
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  Icon(
-                                    Icons.access_time,
-                                    size: 36.0, // ขนาดของไอคอน
-                                    color: const Color.fromARGB(
-                                        255, 209, 167, 0), // สีของไอคอน
-                                  ),
-                                ],
-                              ),
-                              SizedBox(height: 30),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  GestureDetector(
-                                    onTap: () =>
-                                        _showConfirmationDialog(context, order),
-                                    child: Text(
-                                      'กดรับงาน',
-                                      style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          decoration: TextDecoration.underline,
-                                          color: Colors.green,
-                                          decorationColor: Colors.green),
-                                    ),
-                                  ),
-                                  GestureDetector(
-                                    onTap: () =>
-                                        _showJobDetailsDialog(context, order),
-                                    child: Text(
-                                      'ดูรายละเอียดงาน',
-                                      style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          decoration: TextDecoration.underline,
-                                          color: Colors.green,
-                                          decorationColor: Colors.green),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
         ],
       ),
     );
@@ -204,82 +229,81 @@ class _RiderorderPageState extends State<RiderorderPage> {
 
   // แสดง Dialog ยืนยันการรับงาน
   void _showConfirmationDialog(BuildContext context, Map<String, dynamic> order) {
-  showDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return AlertDialog(
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              'คุณยืนยันที่จะรับออเดอร์หรือไม่',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
-            ),
-          ],
-        ),
-        actions: <Widget>[
-          Row(
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                width: 100,
-                decoration: BoxDecoration(
-                  color: Colors.green,
-                  borderRadius: BorderRadius.circular(5),
-                ),
-                child: TextButton(
-                  child: Text(
-                    'ยกเลิก',
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                ),
-              ),
-              SizedBox(width: 30),
-              Container(
-                width: 100,
-                decoration: BoxDecoration(
-                  color: Colors.green,
-                  borderRadius: BorderRadius.circular(5),
-                ),
-                child: TextButton(
-                  child: Text(
-                    'ยืนยัน',
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  onPressed: () {
-                    // อัปเดตสถานะออเดอร์และบันทึกเบอร์และชื่อไรเดอร์
-                    _updateOrderStatus(order['id']);
-                    Navigator.of(context).pop();
-                    // ไปที่หน้า ReceiveOrderPage พร้อมส่ง orderId ไปด้วย
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ReceiveOrderPage(orderId: order['id']), // ส่ง orderId
-                      ),
-                    );
-                  },
+              Text(
+                'คุณยืนยันที่จะรับออเดอร์หรือไม่',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
                 ),
               ),
             ],
           ),
-        ],
-      );
-    },
-  );
-}
-
+          actions: <Widget>[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 100,
+                  decoration: BoxDecoration(
+                    color: Colors.green,
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: TextButton(
+                    child: Text(
+                      'ยกเลิก',
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                  ),
+                ),
+                SizedBox(width: 30),
+                Container(
+                  width: 100,
+                  decoration: BoxDecoration(
+                    color: Colors.green,
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: TextButton(
+                    child: Text(
+                      'ยืนยัน',
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    onPressed: () {
+                      // อัปเดตสถานะออเดอร์และบันทึกเบอร์และชื่อไรเดอร์
+                      _updateOrderStatus(order['id']);
+                      Navigator.of(context).pop();
+                      // ไปที่หน้า ReceiveOrderPage พร้อมส่ง orderId ไปด้วย
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ReceiveOrderPage(orderId: order['id']),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   // ฟังก์ชันอัปเดตสถานะออเดอร์ใน Firebase
   void _updateOrderStatus(String orderId) async {
@@ -301,96 +325,163 @@ class _RiderorderPageState extends State<RiderorderPage> {
     }
   }
 
-  // แสดง Dialog รายละเอียดงาน
+  // แสดง Dialog รายละเอียดงาน (แบบเต็มหน้าจอ)
   void _showJobDetailsDialog(BuildContext context, Map<String, dynamic> order) {
-    showDialog(
+    showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: Container(
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: Colors.green, // สีของขอบ
-                width: 2.0, // ความหนาของขอบ
-              ),
-              borderRadius: BorderRadius.circular(5), // มุมมนของกรอบ
-            ),
-            padding: EdgeInsets.all(5), // เพิ่ม padding ภายในกรอบ
-            child: Text(
-              '${order['name']}',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16, // ขนาดตัวอักษร
-              ),
-            ),
+        // Add null checks for storeLocation, customerLocation, and riderLocation
+        LatLng? storeLocation;
+        if (order['sellerLocation'] != null && order['sellerLocation']['latitude'] != null && order['sellerLocation']['longitude'] != null) {
+          storeLocation = LatLng(order['sellerLocation']['latitude'], order['sellerLocation']['longitude']);
+        }
+
+        LatLng? customerLocation;
+        if (order['buyerLocation'] != null && order['buyerLocation']['latitude'] != null && order['buyerLocation']['longitude'] != null) {
+          customerLocation = LatLng(order['buyerLocation']['latitude'], order['buyerLocation']['longitude']);
+        }
+
+        LatLng? riderLocation;
+        if (order['riderLocation'] != null && order['riderLocation']['latitude'] != null && order['riderLocation']['longitude'] != null) {
+          riderLocation = LatLng(order['riderLocation']['latitude'], order['riderLocation']['longitude']);
+        }
+
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom, // ให้เลื่อนขึ้นตามคีย์บอร์ด
           ),
-          content: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8.0), // กำหนดขอบมน
-                child: Image.network(
-                  order['imageUrl'],
-                  width: 120,
-                  height: 120,
-                  fit: BoxFit.cover,
-                ),
-              ),
-              SizedBox(
-                width: 30,
-              ),
-              Container(
-                padding: EdgeInsets.all(10), // เพิ่ม padding ภายในกรอบ
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: Colors.green, // สีของขอบ
-                    width: 2.0, // ความหนาของขอบ
+          child: DraggableScrollableSheet(
+            initialChildSize: 0.9,
+            maxChildSize: 0.95,
+            minChildSize: 0.7,
+            builder: (_, scrollController) {
+              return SingleChildScrollView(
+                controller: scrollController,
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'รายละเอียดงาน',
+                            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.close),
+                            onPressed: () {
+                              Navigator.pop(context);
+                            },
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 10),
+
+                      // รูปเมนู
+                      if (order['imageUrl'] != null)
+                        Image.network(order['imageUrl'], height: 200, width: double.infinity, fit: BoxFit.cover),
+                      SizedBox(height: 20),
+
+                      // ชื่อเมนู
+                      Text(
+                        'ชื่อเมนู: ${order['name']}',
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      ),
+                      SizedBox(height: 10),
+
+                      // รายละเอียด
+                      Text(
+                        'รายละเอียด: ${order['description']}',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      SizedBox(height: 10),
+
+                      // จำนวน
+                      Text(
+                        'จำนวน: ${order['quantity']}',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      SizedBox(height: 20),
+
+                      // ข้อมูลผู้ซื้อและผู้ขาย
+                      Text(
+                        'เบอร์ผู้ซื้อ: ${order['buyer']}',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      Text(
+                        'เบอร์ผู้ขาย: ${order['seller']}',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      SizedBox(height: 20),
+
+                      // Map ที่มี marker 3 จุด: ร้านค้า, ไรเดอร์, ลูกค้า
+                      if (storeLocation != null || customerLocation != null || riderLocation != null)
+                        Container(
+                          height: 300,
+                          child: FlutterMap(
+                            options: MapOptions(
+                              center: storeLocation ?? customerLocation ?? LatLng(0, 0), // Default center
+                              zoom: 13.0,
+                            ),
+                            children: [
+                              TileLayer(
+                                urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                                subdomains: ['a', 'b', 'c'],
+                              ),
+                              MarkerLayer(
+                                markers: [
+                                  // ร้านค้า
+                                  if (storeLocation != null)
+                                    Marker(
+                                      width: 80.0,
+                                      height: 80.0,
+                                      point: storeLocation,
+                                      builder: (ctx) => Icon(Icons.store, color: Colors.green, size: 40),
+                                    ),
+                                  // ลูกค้า
+                                  if (customerLocation != null)
+                                    Marker(
+                                      width: 80.0,
+                                      height: 80.0,
+                                      point: customerLocation,
+                                      builder: (ctx) => Icon(Icons.home, color: Colors.blue, size: 40),
+                                    ),
+                                  // ไรเดอร์
+                                  if (riderLocation != null)
+                                    Marker(
+                                      width: 80.0,
+                                      height: 80.0,
+                                      point: riderLocation,
+                                      builder: (ctx) => Icon(Icons.delivery_dining, color: Colors.orange, size: 40),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      SizedBox(height: 20),
+
+                      // ปุ่มปิด dialog
+                      Center(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                          ),
+                          child: Text('ปิดหน้าต่าง', style: TextStyle(color: Colors.white)),
+                        ),
+                      ),
+                    ],
                   ),
-                  borderRadius: BorderRadius.circular(5), // มุมมนของกรอบ
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('ผู้ส่ง: ${order['seller']}'),
-                    SizedBox(
-                        height: 5), // ใช้ height เพื่อเพิ่มช่องว่างในแนวตั้ง
-                    Text('ที่อยู่: ${order['sellerLocation']}'),
-                  ],
-                ),
-              ),
-            ],
+              );
+            },
           ),
-          actions: <Widget>[
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(10.0),
-                  child: TextButton(
-                    style: TextButton.styleFrom(
-                      backgroundColor: Colors.green, // สีพื้นหลังปุ่ม
-                      padding: EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 10), // padding ปุ่ม
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10), // ขอบมนปุ่ม
-                      ),
-                    ),
-                    child: Text(
-                      'ปิด',
-                      style: TextStyle(
-                        color: Colors.white, // สีตัวอักษร
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ],
         );
       },
     );
