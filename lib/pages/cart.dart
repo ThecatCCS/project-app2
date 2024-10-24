@@ -1,3 +1,4 @@
+import 'package:firebase_image_upload/pages/orderdetail.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
@@ -14,12 +15,13 @@ class _CartPageState extends State<CartPage>
     with SingleTickerProviderStateMixin {
   String searchQuery = '';
   String phoneNumber = '';
+  String orderSearchQuery = ''; // For filtering orders by phone number
   late TabController _tabController;
   final DatabaseReference _database = FirebaseDatabase.instance.ref();
   List<Map<String, dynamic>> menuItems = [];
   List<Map<String, dynamic>> orders = [];
-  File? _menuImageFile; // Separate image file for menu
-  File? _orderImageFile; // Separate image file for order status
+  File? _menuImageFile;
+  File? _orderImageFile;
 
   @override
   void initState() {
@@ -40,49 +42,45 @@ class _CartPageState extends State<CartPage>
   }
 
   void fetchMenuItems() async {
-  final snapshot = await _database.child('menuItems').get();
-  if (snapshot.exists) {
-    List<Map<String, dynamic>> fetchedItems = [];
-    Map<String, dynamic> data = Map<String, dynamic>.from(snapshot.value as Map);
-    data.forEach((key, value) {
-      Map<String, dynamic> item = Map<String, dynamic>.from(value);
-      item['id'] = key;  // เพิ่มไอดีเข้าไปในข้อมูลของแต่ละเมนู
-      if (item['phoneNumber'] == phoneNumber) {
-        fetchedItems.add(item);
-      }
-    });
-    setState(() {
-      menuItems = fetchedItems;
-    });
+    final snapshot = await _database.child('menuItems').get();
+    if (snapshot.exists) {
+      List<Map<String, dynamic>> fetchedItems = [];
+      Map<String, dynamic> data = Map<String, dynamic>.from(snapshot.value as Map);
+      data.forEach((key, value) {
+        Map<String, dynamic> item = Map<String, dynamic>.from(value);
+        item['id'] = key;
+        if (item['phoneNumber'] == phoneNumber) {
+          fetchedItems.add(item);
+        }
+      });
+      setState(() {
+        menuItems = fetchedItems;
+      });
+    }
   }
-}
-
 
   void fetchOrders() async {
-  final snapshot = await _database.child('orders').get();
-  if (snapshot.exists) {
-    List<Map<String, dynamic>> fetchedOrders = [];
-    Map<String, dynamic> data = Map<String, dynamic>.from(snapshot.value as Map);
-    data.forEach((key, value) {
-      Map<String, dynamic> order = Map<String, dynamic>.from(value);
-      order['id'] = key;  // เพิ่มไอดีเข้าไปในข้อมูลของแต่ละออเดอร์
-      if (order['seller'] == phoneNumber) {
-        fetchedOrders.add(order);
-      }
-    });
-    setState(() {
-      orders = fetchedOrders;
-    });
+    final snapshot = await _database.child('orders').get();
+    if (snapshot.exists) {
+      List<Map<String, dynamic>> fetchedOrders = [];
+      Map<String, dynamic> data = Map<String, dynamic>.from(snapshot.value as Map);
+      data.forEach((key, value) {
+        Map<String, dynamic> order = Map<String, dynamic>.from(value);
+        order['id'] = key;
+        if (order['seller'] == phoneNumber) {
+          fetchedOrders.add(order);
+        }
+      });
+      setState(() {
+        orders = fetchedOrders;
+      });
+    }
   }
-}
 
-
-  // Separate upload for menu image
   Future<String> uploadMenuImageToFirebase(File imageFile) async {
     try {
       String fileName = DateTime.now().millisecondsSinceEpoch.toString();
-      Reference firebaseStorageRef =
-          FirebaseStorage.instance.ref().child('menuImages/$fileName');
+      Reference firebaseStorageRef = FirebaseStorage.instance.ref().child('menuImages/$fileName');
       UploadTask uploadTask = firebaseStorageRef.putFile(imageFile);
       TaskSnapshot taskSnapshot = await uploadTask.whenComplete(() => {});
       String downloadUrl = await taskSnapshot.ref.getDownloadURL();
@@ -92,65 +90,20 @@ class _CartPageState extends State<CartPage>
     }
   }
 
-  // Separate upload for order status image
-  Future<String> uploadOrderImageToFirebase(File imageFile) async {
-    try {
-      String fileName = DateTime.now().millisecondsSinceEpoch.toString();
-      Reference firebaseStorageRef =
-          FirebaseStorage.instance.ref().child('orderStatusImages/$fileName');
-      UploadTask uploadTask = firebaseStorageRef.putFile(imageFile);
-      TaskSnapshot taskSnapshot = await uploadTask.whenComplete(() => {});
-      String downloadUrl = await taskSnapshot.ref.getDownloadURL();
-      return downloadUrl;
-    } catch (e) {
-      throw Exception("Failed to upload order status image: $e");
-    }
-  }
-
-  // Pick image for menu
   Future<void> pickMenuImage() async {
-    final pickedFile =
-        await ImagePicker().pickImage(source: ImageSource.camera);
+    final pickedFile = await ImagePicker().pickImage(source: ImageSource.camera);
     setState(() {
       _menuImageFile = File(pickedFile!.path);
     });
   }
 
-  // Pick image for order status update
-  Future<void> pickOrderImage() async {
-    final pickedFile =
-        await ImagePicker().pickImage(source: ImageSource.camera);
-    setState(() {
-      _orderImageFile = File(pickedFile!.path);
-    });
-  }
-
-  void updateOrderStatus(String orderId, String newStatus) async {
-  try {
-    String? imageUrl;
-
-    // อัปโหลดรูปภาพใหม่ถ้ามีการเลือก
-    if (_orderImageFile != null) {
-      imageUrl = await uploadNewImageToFirebase(_orderImageFile!);
-    }
-
-    await _database.child('orders/$orderId').update({
-      'status': newStatus,
-      'imageUrl1': imageUrl, // อัปเดต URL ของรูปภาพใหม่
-    });
-
-    fetchOrders(); // อัปเดตลิสต์ออเดอร์ใหม่
+  void deleteMenuItem(String id) async {
+    await _database.child('menuItems/$id').remove();
+    fetchMenuItems();
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('สถานะออเดอร์อัพเดตสำเร็จ!')),
+      SnackBar(content: Text('เมนูลบเรียบร้อยแล้ว!')),
     );
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('เกิดข้อผิดพลาด: $e')),
-    );
-    print('Error updating order status: $e');
   }
-}
-
 
   @override
   void dispose() {
@@ -193,9 +146,7 @@ class _CartPageState extends State<CartPage>
     List<Map<String, dynamic>> filteredItems = menuItems
         .where((item) =>
             item['name'].toLowerCase().contains(searchQuery.toLowerCase()) ||
-            item['description']
-                .toLowerCase()
-                .contains(searchQuery.toLowerCase()))
+            item['description'].toLowerCase().contains(searchQuery.toLowerCase()))
         .toList();
 
     return Column(
@@ -273,7 +224,7 @@ class _CartPageState extends State<CartPage>
                           ),
                           ElevatedButton(
                             onPressed: () {
-                              // deleteMenuItem(item['id']);
+                              deleteMenuItem(item['id']);
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.red,
@@ -296,124 +247,183 @@ class _CartPageState extends State<CartPage>
     );
   }
 
-  Widget buildOrderSummary() {
-  if (orders.isEmpty) {
+ Widget buildOrderSummary() {
+  List<Map<String, dynamic>> filteredOrders = orders
+      .where((order) =>
+          order['buyer'].toLowerCase().contains(orderSearchQuery.toLowerCase()))
+      .toList();
+
+  if (filteredOrders.isEmpty) {
     return Center(child: Text('ไม่มีออเดอร์ที่เกี่ยวข้อง'));
   }
 
-  return ListView.builder(
-    itemCount: orders.length,
-    itemBuilder: (context, index) {
-      final order = orders[index];
-      return Card(
-        margin: EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(15.0),
-        ),
-        elevation: 5,
-        child: Padding(
-          padding: const EdgeInsets.all(15),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    order['name'],
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Color.fromARGB(255, 75, 161, 72),
-                    ),
-                  ),
-                  Icon(
-                    Icons.fastfood,
-                    color: Colors.orangeAccent,
-                    size: 30,
-                  ),
-                ],
-              ),
-              SizedBox(height: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'จำนวน: ${order['quantity']}',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade100,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      'สถานะ: ${order['status']}',
-                      style: TextStyle(
-                        color: Colors.blue,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 10),
-              Row(
-                children: [
-                  Icon(Icons.person, color: Colors.grey),
-                  SizedBox(width: 5),
-                  Text(
-                    'ผู้ซื้อ: ${order['buyer']}',
-                    style: TextStyle(
-                      fontSize: 16,
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 5),
-              Row(
-                children: [
-                  Icon(Icons.store, color: Colors.grey),
-                  SizedBox(width: 5),
-                  Text(
-                    'ผู้ขาย: ${order['seller']}',
-                    style: TextStyle(
-                      fontSize: 16,
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 15),
-
-              // ปุ่มเลือกภาพใหม่
-              if (order['status'] == 'กำลังทำอาหาร') ...[
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    await pickNewImage();
-                    if (_orderImageFile != null) {
-                      updateOrderStatus(order['id'], 'รอไรเดอร์รับงาน');
-                    }
-                  },
-                  icon: Icon(Icons.camera_alt, color: Colors.white),
-                  label: Text('เลือกภาพใหม่และเปลี่ยนสถานะ'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Color.fromARGB(255, 75, 161, 72),
-                  ),
-                ),
-              ],
-            ],
+  return Column(
+    children: [
+      Container(
+        padding: EdgeInsets.all(5),
+        margin: EdgeInsets.only(top: 10, left: 10, right: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: Color.fromARGB(255, 75, 161, 72),
+            width: 3,
           ),
         ),
-      );
-    },
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                onChanged: (value) {
+                  setState(() {
+                    orderSearchQuery = value;
+                  });
+                },
+                decoration: InputDecoration(
+                  hintText: 'ค้นหาออเดอร์ตามเบอร์โทร',
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.only(left: 15),
+                ),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            Icon(Icons.search, color: Color.fromARGB(255, 75, 161, 72)),
+          ],
+        ),
+      ),
+      Expanded(
+        child: ListView.builder(
+          itemCount: filteredOrders.length,
+          itemBuilder: (context, index) {
+            final order = filteredOrders[index];
+            return Card(
+              margin: EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15.0),
+              ),
+              elevation: 5,
+              child: Padding(
+                padding: const EdgeInsets.all(15),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          order['name'],
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Color.fromARGB(255, 75, 161, 72),
+                          ),
+                        ),
+                        Icon(
+                          Icons.fastfood,
+                          color: Colors.orangeAccent,
+                          size: 30,
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'จำนวน: ${order['quantity']}',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade100,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'สถานะ: ${order['status']}',
+                            style: TextStyle(
+                              color: Colors.blue,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Icon(Icons.person, color: Colors.grey),
+                        SizedBox(width: 5),
+                        Text(
+                          'ผู้ซื้อ: ${order['buyer']}',
+                          style: TextStyle(
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 5),
+                    Row(
+                      children: [
+                        Icon(Icons.phone, color: Colors.grey),
+                        SizedBox(width: 5),
+                        Text(
+                          'ผู้ขาย: ${order['seller']}',
+                          style: TextStyle(
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 15),
+
+                    // ปุ่มสำหรับเปลี่ยนสถานะและอัพโหลดรูป เมื่อสถานะคือ "กำลังทำอาหาร"
+                    if (order['status'] == 'กำลังทำอาหาร') ...[
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          await pickNewImage();
+                          if (_orderImageFile != null) {
+                            updateOrderStatus(order['id'], 'รอไรเดอร์รับงาน');
+                          }
+                        },
+                        icon: Icon(Icons.camera_alt, color: Colors.white),
+                        label: Text('อัพโหลดรูปและเปลี่ยนสถานะ'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Color.fromARGB(255, 75, 161, 72),
+                        ),
+                      ),
+                    ],
+
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => OrderChatPage(orderId: order['id']),
+                          ),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Color.fromARGB(255, 75, 161, 72),
+                      ),
+                      child: Text('ดูรายละเอียด'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    ],
   );
 }
-
-
 
 
   void showAddMenuDialog(BuildContext context) {
@@ -458,8 +468,7 @@ class _CartPageState extends State<CartPage>
             TextButton(
               onPressed: () async {
                 if (_menuImageFile != null) {
-                  String imageUrl =
-                      await uploadMenuImageToFirebase(_menuImageFile!);
+                  String imageUrl = await uploadMenuImageToFirebase(_menuImageFile!);
                   Map<String, dynamic> newItem = {
                     'name': name,
                     'description': description,
@@ -492,17 +501,37 @@ class _CartPageState extends State<CartPage>
       );
     }
   }
-  // ฟังก์ชันเลือกภาพใหม่
-Future<void> pickNewImage() async {
-  final pickedFile = await ImagePicker().pickImage(source: ImageSource.camera);
-  if (pickedFile != null) {
-    setState(() {
-      _orderImageFile = File(pickedFile.path);
+  void updateOrderStatus(String orderId, String newStatus) async {
+  try {
+    String? imageUrl;
+
+    // Upload a new image if one has been selected
+    if (_orderImageFile != null) {
+      imageUrl = await uploadNewImageToFirebase(_orderImageFile!);
+    }
+
+    // Update the order status and imageUrl in the Firebase database
+    await _database.child('orders/$orderId').update({
+      'status': newStatus,
+      if (imageUrl != null) 'imageUrl1': imageUrl, // Update imageUrl if it exists
     });
+
+    // Fetch updated orders list to refresh UI
+    fetchOrders();
+
+    // Show success message
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('สถานะออเดอร์อัพเดตสำเร็จ!')),
+    );
+  } catch (e) {
+    // Show error message if something goes wrong
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('เกิดข้อผิดพลาด: $e')),
+    );
+    print('Error updating order status: $e');
   }
 }
-
-// ฟังก์ชันอัปโหลดภาพใหม่ไปยัง Firebase
+// Upload image to Firebase and return its download URL
 Future<String> uploadNewImageToFirebase(File imageFile) async {
   try {
     String fileName = DateTime.now().millisecondsSinceEpoch.toString();
@@ -513,6 +542,15 @@ Future<String> uploadNewImageToFirebase(File imageFile) async {
     return downloadUrl;
   } catch (e) {
     throw Exception("Failed to upload order image: $e");
+  }
+}
+// Pick a new image for order status
+Future<void> pickNewImage() async {
+  final pickedFile = await ImagePicker().pickImage(source: ImageSource.camera);
+  if (pickedFile != null) {
+    setState(() {
+      _orderImageFile = File(pickedFile.path);
+    });
   }
 }
 
