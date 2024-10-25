@@ -29,25 +29,30 @@ class _OrderPageState extends State<OrderPage> {
     fetchOrders(); // ดึงข้อมูล order ของผู้ซื้อ
   }
 
-  // ฟังก์ชันดึงข้อมูล order ของผู้ซื้อจาก Firebase
-  Future<void> fetchOrders() async {
-    final snapshot = await _database.child('orders').get();
-    if (snapshot.exists) {
-      List<Map<String, dynamic>> fetchedOrders = [];
-      Map<String, dynamic> data =
-          Map<String, dynamic>.from(snapshot.value as Map);
-      data.forEach((key, value) {
-        Map<String, dynamic> order = Map<String, dynamic>.from(value);
-        // Assuming 'key' is the orderId in Firebase
-        order['id'] = key;
+ // ฟังก์ชันดึงข้อมูล order ของผู้ซื้อจาก Firebase
+Future<void> fetchOrders() async {
+  final snapshot = await _database.child('orders').get();
+  if (snapshot.exists) {
+    List<Map<String, dynamic>> fetchedOrders = [];
+    Map<String, dynamic> data =
+        Map<String, dynamic>.from(snapshot.value as Map);
+    data.forEach((key, value) {
+      Map<String, dynamic> order = Map<String, dynamic>.from(value);
+      // Assuming 'key' is the orderId in Firebase
+      order['id'] = key;
+
+      // Check if the order belongs to the user with the current phone number
+      if (order['buyer'] == phoneNumber) {
         // Attach the key as the orderId to the order
         fetchedOrders.add(order);
-      });
-      setState(() {
-        orders = fetchedOrders;
-      });
-    }
+      }
+    });
+    setState(() {
+      orders = fetchedOrders;
+    });
   }
+}
+
 
   // ฟังก์ชันสำหรับรีเฟรชข้อมูล
   Future<void> _onRefresh() async {
