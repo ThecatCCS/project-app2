@@ -51,75 +51,84 @@ class _OrderChatPageState extends State<OrderChatPage> {
   }
 
   // Fetch order details including status and images from Firebase
-  Future<void> _fetchOrderDetails() async {
-    final snapshot = await _database.child('orders/${widget.orderId}').get();
-    if (snapshot.exists) {
-      Map<String, dynamic> orderData = Map<String, dynamic>.from(snapshot.value as Map);
+  // Fetch order details including status and images from Firebase
+Future<void> _fetchOrderDetails() async {
+  final snapshot = await _database.child('orders/${widget.orderId}').get();
+  if (snapshot.exists) {
+    Map<String, dynamic> orderData = Map<String, dynamic>.from(snapshot.value as Map);
+    
+    String buyerPhone = orderData['buyer'] ?? 'Unknown'; 
+    
+    // ดึงข้อมูลผู้ซื้อจาก users
+    final buyerSnapshot = await _database.child('users/$buyerPhone').get();
+    if (buyerSnapshot.exists) {
+      Map<String, dynamic> buyerData = Map<String, dynamic>.from(buyerSnapshot.value as Map);
       
-      String buyerPhone = orderData['buyer'] ?? 'Unknown'; 
-      
-      // ดึงข้อมูลผู้ซื้อจาก users
-      final buyerSnapshot = await _database.child('users/$buyerPhone').get();
-      if (buyerSnapshot.exists) {
-        Map<String, dynamic> buyerData = Map<String, dynamic>.from(buyerSnapshot.value as Map);
-        
-        setState(() {
-          buyerName = buyerData['name'] ?? 'Unknown Buyer'; 
-          this.buyerPhone = buyerPhone; 
-          buyerImageUrl = buyerData['imageUrl'];
+      setState(() {
+        buyerName = buyerData['name'] ?? 'Unknown Buyer'; 
+        this.buyerPhone = buyerPhone; 
+        buyerImageUrl = buyerData['imageUrl'];
 
-          // Rider details
-          riderName = orderData['riderName'] ?? 'No Rider Yet';
-          riderPhone = orderData['riderPhone'] ?? '';
+        // Rider details
+        riderName = orderData['riderName'] ?? 'No Rider Yet';
+        riderPhone = orderData['riderPhone'] ?? '';
 
-          // ดึงข้อมูลไรเดอร์จาก users ถ้ามี
-          if (riderPhone != null && riderPhone!.isNotEmpty) {
-            final riderSnapshot = _database.child('users/$riderPhone').get();
-            riderSnapshot.then((snapshot) {
-              if (snapshot.exists) {
-                Map<String, dynamic> riderData = Map<String, dynamic>.from(snapshot.value as Map);
-                setState(() {
-                  riderImageUrl = riderData['imageUrl'];
-                  riderVehicleNumber = riderData['vehicleNumber'];
-                });
-              }
-            });
-          }
+        // ดึงข้อมูลไรเดอร์จาก users ถ้ามี
+        if (riderPhone != null && riderPhone!.isNotEmpty) {
+          final riderSnapshot = _database.child('users/$riderPhone').get();
+          riderSnapshot.then((snapshot) {
+            if (snapshot.exists) {
+              Map<String, dynamic> riderData = Map<String, dynamic>.from(snapshot.value as Map);
+              setState(() {
+                riderImageUrl = riderData['imageUrl'];
+                riderVehicleNumber = riderData['vehicleNumber'];
+              });
+            }
+          });
+        }
 
-          // Product details
-          productName = orderData['name'];
-          productDescription = orderData['description'];
-          productQuantity = orderData['quantity'];
-          productImageUrl = orderData['imageUrl'];
+        // Product details
+        productName = orderData['name'];
+        productDescription = orderData['description'];
+        productQuantity = orderData['quantity'];
+        productImageUrl = orderData['imageUrl'];
 
-          // Shipment status and images
-          _shopLocation = LatLng(orderData['sellerLocation']['latitude'], orderData['sellerLocation']['longitude']);
-          status = orderData['status'] ?? 'Unknown Status';
-          imageUrl1 = orderData['imageUrl1'];
-          imageUrl2 = orderData['imageUrl2'];
-          imageUrl3 = orderData['imageUrl3'];
+        // Shipment status and images
+        _shopLocation = LatLng(orderData['sellerLocation']['latitude'], orderData['sellerLocation']['longitude']);
+        status = orderData['status'] ?? 'Unknown Status';
+        imageUrl1 = orderData['imageUrl1'];
+        imageUrl2 = orderData['imageUrl2'];
+        imageUrl3 = orderData['imageUrl3'];
 
-          // Check if the status is "กำลังจัดส่ง"
-          if (status == 'กำลังจัดส่ง') {
-            isDelivering = true;
-            _listenForRiderLocation();
-          }
-        });
-      }
+        // Check if the status is "กำลังจัดส่ง"
+        if (status == 'กำลังจัดส่ง') {
+          isDelivering = true;
+          _listenForRiderLocation();
+        } else if (status == 'จัดส่งสำเร็จ') {
+          isDelivering = false;
+          _riderLocation = null; // Remove rider marker
+          _stopListeningForRiderLocation();
+        }
+      });
     }
   }
+}
+
 
   // ฟังการเปลี่ยนแปลงตำแหน่งไรเดอร์แบบเรียลไทม์
   void _listenForRiderLocation() {
-    _database.child('orders/${widget.orderId}/riderLocation').onValue.listen((event) {
-      if (event.snapshot.exists) {
-        Map<String, dynamic> locationData = Map<String, dynamic>.from(event.snapshot.value as Map);
-        setState(() {
-          _riderLocation = LatLng(locationData['latitude'], locationData['longitude']);
-        });
-      }
-    });
-  }
+  _database.child('orders/${widget.orderId}/riderLocation').onValue.listen((event) {
+    if (event.snapshot.exists) {
+      Map<String, dynamic> locationData = Map<String, dynamic>.from(event.snapshot.value as Map);
+      setState(() {
+        _riderLocation = LatLng(locationData['latitude'], locationData['longitude']);
+      });
+    }
+  });
+}
+void _stopListeningForRiderLocation() {
+  _database.child('orders/${widget.orderId}/riderLocation').onValue.drain();
+}
 
   @override
   Widget build(BuildContext context) {
@@ -149,49 +158,54 @@ class _OrderChatPageState extends State<OrderChatPage> {
   }
 
   // Build the Map widget
-  Widget _buildMap() {
-    return Container(
-      height: 300,
-      child: _currentLocation == null || (_shopLocation == null && _riderLocation == null)
-          ? Center(child: CircularProgressIndicator())
-          : FlutterMap(
-              options: MapOptions(
-                center: _currentLocation,
-                zoom: 13.0,
+  // Build the Map widget
+Widget _buildMap() {
+  return Container(
+    height: 300,
+    child: _currentLocation == null || (_shopLocation == null && _riderLocation == null)
+        ? Center(child: CircularProgressIndicator())
+        : FlutterMap(
+            options: MapOptions(
+              center: _currentLocation,
+              zoom: 13.0,
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                subdomains: ['a', 'b', 'c'],
               ),
-              children: [
-                TileLayer(
-                  urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-                  subdomains: ['a', 'b', 'c'],
-                ),
-                MarkerLayer(
-                  markers: [
+              MarkerLayer(
+                markers: [
+                  // User's current location
+                  Marker(
+                    width: 80.0,
+                    height: 80.0,
+                    point: _currentLocation!,
+                    builder: (ctx) => Icon(Icons.location_pin, color: Colors.blue, size: 40),
+                  ),
+                  // Rider's location (only if delivering)
+                  if (isDelivering && _riderLocation != null)
                     Marker(
                       width: 80.0,
                       height: 80.0,
-                      point: _currentLocation!,
-                      builder: (ctx) => Icon(Icons.location_pin, color: Colors.blue, size: 40),
+                      point: _riderLocation!,
+                      builder: (ctx) => Icon(Icons.delivery_dining, color: Colors.orange, size: 40),
                     ),
-                    if (isDelivering && _riderLocation != null)
-                      Marker(
-                        width: 80.0,
-                        height: 80.0,
-                        point: _riderLocation!,
-                        builder: (ctx) => Icon(Icons.delivery_dining, color: Colors.orange, size: 40),
-                      )
-                    else if (_shopLocation != null)
-                      Marker(
-                        width: 80.0,
-                        height: 80.0,
-                        point: _shopLocation!,
-                        builder: (ctx) => Icon(Icons.store, color: Colors.green, size: 40),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-    );
-  }
+                  // Shop location
+                  if (_shopLocation != null)
+                    Marker(
+                      width: 80.0,
+                      height: 80.0,
+                      point: _shopLocation!,
+                      builder: (ctx) => Icon(Icons.store, color: Colors.green, size: 40),
+                    ),
+                ],
+              ),
+            ],
+          ),
+  );
+}
+
 
   // Build the status and images consecutively
   Widget _buildStatusAndImages() {
