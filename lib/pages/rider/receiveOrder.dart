@@ -1,3 +1,4 @@
+import 'package:firebase_image_upload/pages/rider/riderOrder.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:geolocator/geolocator.dart';
@@ -24,6 +25,8 @@ class _ReceiveOrderPageState extends State<ReceiveOrderPage> {
   LatLng? customerLocation;
   late StreamSubscription<Position> positionStream;
   File? _imageFile; // ตัวแปรสำหรับเก็บไฟล์ภาพ
+  bool _mapMovedByUser = false; // ตัวแปรเพื่อเก็บสถานะการเลื่อนแผนที่โดยผู้ใช้
+  MapController _mapController = MapController(); // เพิ่มตัวควบคุมแผนที่
 
   @override
   void initState() {
@@ -53,6 +56,14 @@ class _ReceiveOrderPageState extends State<ReceiveOrderPage> {
         riderPosition = position; // อัปเดตตำแหน่งใน UI
       });
       _updateRiderLocation(position); // อัปเดตตำแหน่งใน Firebase
+
+      // อัปเดตตำแหน่งศูนย์กลางของแผนที่เฉพาะเมื่อผู้ใช้ไม่ได้เลื่อนแผนที่เอง
+      if (!_mapMovedByUser) {
+        _mapController.move(
+          LatLng(position.latitude, position.longitude), 
+          _mapController.zoom
+        );
+      }
     });
   }
 
@@ -140,43 +151,44 @@ class _ReceiveOrderPageState extends State<ReceiveOrderPage> {
     if (currentStatus == 'กำลังไปรับอาหาร') {
       newStatus = 'ไรเดอร์กำลังจัดส่ง';
 
-      // เรียกฟังก์ชันเพื่อถ่ายภาพ
-      await _pickImage();
-      
+      await _pickImage(); // ถ่ายภาพ
+
       if (_imageFile != null) {
         String? imageUrl2 = await _uploadImage(_imageFile!); // อัปโหลดภาพ
 
-        // ถ้าอัปโหลดสำเร็จ อัปเดตสถานะพร้อม URL
         if (imageUrl2 != null) {
           await _database.child('orders/${widget.orderId}').update({
             'status': newStatus,
-            'imageUrl2': imageUrl2, // เพิ่ม URL ของภาพเป็น imageUrl2
+            'imageUrl2': imageUrl2, // เพิ่ม URL ของภาพ
           });
         }
       }
-      
+
       setState(() {
         currentStatus = newStatus;
       });
     } else if (currentStatus == 'ไรเดอร์กำลังจัดส่ง') {
       newStatus = 'จัดส่งสำเร็จ';
 
-      // เรียกฟังก์ชันเพื่อถ่ายภาพ
-      await _pickImage();
+      await _pickImage(); // ถ่ายภาพอีกครั้ง
 
       if (_imageFile != null) {
         String? imageUrl3 = await _uploadImage(_imageFile!); // อัปโหลดภาพ
 
-        // ถ้าอัปโหลดสำเร็จ อัปเดตสถานะพร้อม URL
         if (imageUrl3 != null) {
           await _database.child('orders/${widget.orderId}').update({
             'status': newStatus,
-            'imageUrl3': imageUrl3, // เพิ่ม URL ของภาพเป็น imageUrl3
+            'imageUrl3': imageUrl3, // เพิ่ม URL ของภาพ
           });
         }
       }
 
-      Navigator.pop(context); // เมื่อจัดส่งสำเร็จ กลับไปหน้ารายการออเดอร์
+      // หลังจากจัดส่งสำเร็จ กลับไปหน้าแรก
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => RiderorderPage()), // เปลี่ยนไปหน้าแรก
+        (route) => false, // ลบทุก route ก่อนหน้าออกจาก stack
+      );
     } else {
       return;
     }
@@ -198,11 +210,19 @@ class _ReceiveOrderPageState extends State<ReceiveOrderPage> {
                     customerLocation == null
                 ? Center(child: CircularProgressIndicator())
                 : FlutterMap(
+                    mapController: _mapController, // เพิ่มตัวควบคุมแผนที่
                     options: MapOptions(
                       center: currentStatus == 'กำลังไปรับอาหาร'
                           ? restaurantLocation
                           : customerLocation,
                       zoom: 15.0,
+                      onPositionChanged: (MapPosition position, bool hasGesture) {
+                        if (hasGesture) {
+                          setState(() {
+                            _mapMovedByUser = true; // ผู้ใช้เลื่อนแผนที่เอง
+                          });
+                        }
+                      },
                     ),
                     children: [
                       TileLayer(
@@ -238,31 +258,29 @@ class _ReceiveOrderPageState extends State<ReceiveOrderPage> {
           ),
 
           // ข้อมูลผู้ส่งและผู้รับ
-          // ข้อมูลผู้ส่งและผู้รับ
-Padding(
-  padding: const EdgeInsets.all(16.0),
-  child: Row(
-    mainAxisAlignment: MainAxisAlignment.spaceAround,
-    children: [
-      Column(
-        children: [
-          CircleAvatar(radius: 30, child: Icon(Icons.person)),
-          SizedBox(height: 8),
-          Text(currentStatus == 'กำลังไปรับอาหาร' ? 'ไรเดอร์' : 'ไรเดอร์'),
-        ],
-      ),
-      Icon(Icons.arrow_forward),
-      Column(
-        children: [
-          CircleAvatar(radius: 30, child: Icon(Icons.person)),
-          SizedBox(height: 8),
-          Text(currentStatus == 'ไรเดอร์กำลังจัดส่ง' ? 'ลูกค้า' : 'ร้านค้า'),
-        ],
-      ),
-    ],
-  ),
-),
-
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                Column(
+                  children: [
+                    CircleAvatar(radius: 30, child: Icon(Icons.person)),
+                    SizedBox(height: 8),
+                    Text(currentStatus == 'กำลังไปรับอาหาร' ? 'ไรเดอร์' : 'ไรเดอร์'),
+                  ],
+                ),
+                Icon(Icons.arrow_forward),
+                Column(
+                  children: [
+                    CircleAvatar(radius: 30, child: Icon(Icons.person)),
+                    SizedBox(height: 8),
+                    Text(currentStatus == 'ไรเดอร์กำลังจัดส่ง' ? 'ลูกค้า' : 'ร้านค้า'),
+                  ],
+                ),
+              ],
+            ),
+          ),
 
           // สถานะและปุ่มการจัดการ
           Padding(

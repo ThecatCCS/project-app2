@@ -13,107 +13,82 @@ class RiderorderPage extends StatefulWidget {
 class _RiderorderPageState extends State<RiderorderPage> {
   List<Map<String, dynamic>> orders = [];
   String phoneNumber = ''; // เก็บหมายเลขโทรศัพท์ไรเดอร์
-  String riderName = ''; // เก็บชื่อไรเดอร์
   final DatabaseReference _database = FirebaseDatabase.instance.ref(); // Firebase reference
   String searchQuery = ''; // Holds the search query
 
   @override
   void initState() {
     super.initState();
-    loadRiderDetails(); // โหลดข้อมูลไรเดอร์จาก Realtime Database
-    fetchOrders(); // ดึงรายการ orders ที่มีสถานะเป็น "รอไรเดอร์รับงาน"
+    loadRiderPhone(); // Load rider's phone number from SharedPreferences
+    fetchOrders(); // Fetch orders that are "รอไรเดอร์รับงาน"
   }
 
-  // ฟังก์ชันดึงข้อมูลเบอร์โทรศัพท์และชื่อไรเดอร์จาก Realtime Database
-// ดึงข้อมูลเบอร์โทรศัพท์และชื่อไรเดอร์จาก Firebase Realtime Database (users node)
-void loadRiderDetails() async {
-  SharedPreferences prefs = await SharedPreferences.getInstance();
-  phoneNumber = prefs.getString('phone') ?? '';
+  // Load rider's phone number from SharedPreferences
+  void loadRiderPhone() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    phoneNumber = prefs.getString('phone') ?? ''; // Retrieve rider's phone number from login
 
-  if (phoneNumber.isNotEmpty) {
-    final snapshot = await _database
-        .child('users')
-        .orderByChild('phone')
-        .equalTo(phoneNumber)
-        .limitToFirst(1)
-        .get();
+    print('Phone Number: $phoneNumber');
 
-    if (snapshot.exists) {
-      // Ensure data is retrieved properly and handle null cases
-      Map<String, dynamic> userData = Map<String, dynamic>.from((snapshot.value as Map).values.first);
-
-      setState(() {
-        riderName = userData['name'] ?? ''; // Default to empty string if null
-        phoneNumber = userData['phone'] ?? ''; // Default to empty string if null
-      });
-
-      if (riderName.isEmpty || phoneNumber.isEmpty) {
-        // Handle case where either riderName or phoneNumber is empty
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('ข้อมูลไรเดอร์ไม่สมบูรณ์')),
-        );
-        print('Error: Rider name or phone number is empty');
-      } else {
-        print('Phone Number: $phoneNumber');
-        print('Rider Name: $riderName');
-      }
-    } else {
-      print('Error: No rider data found');
+    if (phoneNumber.isEmpty) {
+      print('Error: No phone number provided');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('ไม่พบข้อมูลไรเดอร์ในระบบ')),
+        SnackBar(content: Text('ไม่พบเบอร์โทรศัพท์ กรุณาลองอีกครั้ง')),
       );
     }
-  } else {
-    print('Error: No phone number provided');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('ไม่พบเบอร์โทรศัพท์ กรุณาลองอีกครั้ง')),
-    );
   }
-}
 
-
-
-
-  // ฟังก์ชันดึงข้อมูล orders จาก Firebase เฉพาะที่มีสถานะเป็น "รอไรเดอร์รับงาน"
+  // Fetch orders from Firebase that are either pending for this rider or available for assignment
   void fetchOrders() async {
-    final snapshot = await _database.child('orders').get();
-    if (snapshot.exists) {
-      List<Map<String, dynamic>> pendingOrders = [];
-      List<Map<String, dynamic>> availableOrders = [];
-      Map<String, dynamic> data = Map<String, dynamic>.from(snapshot.value as Map);
+    try {
+      final snapshot = await _database.child('orders').get();
+      if (snapshot.exists) {
+        List<Map<String, dynamic>> pendingOrders = [];
+        List<Map<String, dynamic>> availableOrders = [];
+        Map<String, dynamic> data = Map<String, dynamic>.from(snapshot.value as Map);
 
-      data.forEach((key, value) {
-        Map<String, dynamic> order = Map<String, dynamic>.from(value);
+        data.forEach((key, value) {
+          Map<String, dynamic> order = Map<String, dynamic>.from(value);
 
-        // ตรวจสอบว่ามีงานที่ยังไม่เสร็จสำหรับไรเดอร์คนนี้หรือไม่
-        if (order['status'] != "จัดส่งสำเร็จ" && order['riderPhone'] == phoneNumber) {
-          order['id'] = key; // เก็บ key ของ order ที่ยังไม่เสร็จ
-          pendingOrders.add(order);
-        } 
-        // ถ้าไม่มีงานค้าง ก็จะเป็นงานที่ไรเดอร์สามารถรับได้ตามปกติ
-        else if (order['status'] == "รอไรเดอร์รับงาน") {
-          order['id'] = key; // เก็บ key ของ order ที่สามารถรับได้
-          availableOrders.add(order);
+          // Show orders for the logged-in rider or orders that are available for assignment
+          if (order['status'] != "จัดส่งสำเร็จ" && order['riderPhone'] == phoneNumber) {
+            order['id'] = key;
+            pendingOrders.add(order);
+          } else if (order['status'] == "รอไรเดอร์รับงาน") {
+            order['id'] = key;
+            availableOrders.add(order);
+          }
+        });
+
+        setState(() {
+          // Display pending orders first, if any, otherwise show available orders
+          orders = pendingOrders.isNotEmpty ? pendingOrders : availableOrders;
+        });
+
+        if (pendingOrders.isNotEmpty) {
+          // If pending orders exist, navigate to ReceiveOrderPage automatically
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ReceiveOrderPage(orderId: pendingOrders[0]['id']),
+            ),
+          );
         }
-      });
-
-      setState(() {
-        orders = pendingOrders.isNotEmpty ? pendingOrders : availableOrders;
-      });
-
-      // ถ้ามีงานค้างอยู่ ให้ไปยังหน้า ReceiveOrderPage โดยอัตโนมัติ
-      if (pendingOrders.isNotEmpty) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ReceiveOrderPage(orderId: pendingOrders[0]['id']), // ส่ง orderId ที่ยังไม่เสร็จ
-          ),
+      } else {
+        print("No orders found in Firebase");
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('ไม่พบรายการคำสั่งซื้อในระบบ')),
         );
       }
+    } catch (e) {
+      print('Error fetching orders: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('เกิดข้อผิดพลาด: $e')),
+      );
     }
   }
 
-  // ฟิลเตอร์รายการ order ตาม search query
+  // Filter orders based on search query
   List<Map<String, dynamic>> getFilteredOrders() {
     return orders.where((item) =>
         item['name'].toLowerCase().contains(searchQuery.toLowerCase()) ||
@@ -121,7 +96,7 @@ void loadRiderDetails() async {
     ).toList();
   }
 
-  // Widget สำหรับแสดงช่องค้นหา
+  // Search bar widget
   Widget buildSearchBar() {
     return Container(
       padding: EdgeInsets.all(5),
@@ -140,7 +115,7 @@ void loadRiderDetails() async {
             child: TextField(
               onChanged: (value) {
                 setState(() {
-                  searchQuery = value; // อัปเดต search query
+                  searchQuery = value;
                 });
               },
               decoration: InputDecoration(
@@ -162,13 +137,12 @@ void loadRiderDetails() async {
 
   @override
   Widget build(BuildContext context) {
-    // ใช้ฟังก์ชันกรอง orders ที่ตรงกับ searchQuery
     List<Map<String, dynamic>> filteredOrders = getFilteredOrders();
 
     return Scaffold(
       body: Column(
         children: [
-          buildSearchBar(), // เพิ่มช่องค้นหา
+          buildSearchBar(),
           if (orders.isEmpty)
             Center(
               child: Text(
@@ -190,9 +164,8 @@ void loadRiderDetails() async {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          // Image
                           ClipRRect(
-                            borderRadius: BorderRadius.circular(8.0), // กำหนดขอบมน
+                            borderRadius: BorderRadius.circular(8.0),
                             child: Image.network(
                               order['imageUrl'],
                               width: 80,
@@ -201,7 +174,6 @@ void loadRiderDetails() async {
                             ),
                           ),
                           SizedBox(width: 10),
-                          // Textual content
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -220,8 +192,8 @@ void loadRiderDetails() async {
                                     ),
                                     Icon(
                                       Icons.access_time,
-                                      size: 36.0, // ขนาดของไอคอน
-                                      color: const Color.fromARGB(255, 209, 167, 0), // สีของไอคอน
+                                      size: 36.0,
+                                      color: const Color.fromARGB(255, 209, 167, 0),
                                     ),
                                   ],
                                 ),
@@ -268,7 +240,7 @@ void loadRiderDetails() async {
     );
   }
 
-  // แสดง Dialog ยืนยันการรับงาน
+  // Confirmation dialog for accepting an order
   void _showConfirmationDialog(BuildContext context, Map<String, dynamic> order) {
     showDialog(
       context: context,
@@ -325,10 +297,8 @@ void loadRiderDetails() async {
                       ),
                     ),
                     onPressed: () {
-                      // อัปเดตสถานะออเดอร์และบันทึกเบอร์และชื่อไรเดอร์
                       _updateOrderStatus(order['id']);
                       Navigator.of(context).pop();
-                      // ไปที่หน้า ReceiveOrderPage พร้อมส่ง orderId ไปด้วย
                       Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -346,46 +316,39 @@ void loadRiderDetails() async {
     );
   }
 
-  // ฟังก์ชันอัปเดตสถานะออเดอร์ใน Firebase
-// ฟังก์ชันอัปเดตสถานะออเดอร์ใน Firebase
-void _updateOrderStatus(String orderId) async {
-  try {
-    // ตรวจสอบค่าก่อนอัปเดตใน Firebase
-    if (riderName.isEmpty || phoneNumber.isEmpty) {
-      throw Exception('Rider name or phone number is empty');
+  // Update the status of the order in Firebase
+  void _updateOrderStatus(String orderId) async {
+    try {
+      if (phoneNumber.isEmpty) {
+        throw Exception('Rider phone number is empty');
+      }
+
+      print('Updating order with riderPhone: $phoneNumber');
+
+      await _database.child('orders/$orderId').update({
+        'status': 'กำลังไปรับอาหาร',
+        'riderPhone': phoneNumber, // Only update phone number
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('รับงานสำเร็จ!')),
+      );
+
+      fetchOrders(); // Refresh the orders after the update
+    } catch (e) {
+      print('Error updating order: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('เกิดข้อผิดพลาด: $e')),
+      );
     }
-
-    print('Updating order with riderName: $riderName and riderPhone: $phoneNumber');
-
-    await _database.child('orders/$orderId').update({
-      'status': 'กำลังไปรับอาหาร', // เปลี่ยนสถานะเป็น "กำลังดำเนินการ"
-      'riderPhone': phoneNumber, // เพิ่มเบอร์โทรศัพท์ไรเดอร์
-      'riderName': riderName, // เพิ่มชื่อไรเดอร์
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('รับงานสำเร็จ!')),
-    );
-
-    // Refresh the orders after the update
-    fetchOrders();
-  } catch (e) {
-    print('Error updating order: $e'); // แสดง error message ถ้ามีข้อผิดพลาด
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('เกิดข้อผิดพลาด: $e')),
-    );
   }
-}
 
-
-
-  // แสดง Dialog รายละเอียดงาน (แบบเต็มหน้าจอ)
+  // Show job details in a dialog
   void _showJobDetailsDialog(BuildContext context, Map<String, dynamic> order) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (BuildContext context) {
-        // Add null checks for storeLocation, customerLocation, and riderLocation
         LatLng? storeLocation;
         if (order['sellerLocation'] != null && order['sellerLocation']['latitude'] != null && order['sellerLocation']['longitude'] != null) {
           storeLocation = LatLng(order['sellerLocation']['latitude'], order['sellerLocation']['longitude']);
@@ -403,7 +366,7 @@ void _updateOrderStatus(String orderId) async {
 
         return Padding(
           padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom, // ให้เลื่อนขึ้นตามคีย์บอร์ด
+            bottom: MediaQuery.of(context).viewInsets.bottom,
           ),
           child: DraggableScrollableSheet(
             initialChildSize: 0.9,
@@ -433,34 +396,22 @@ void _updateOrderStatus(String orderId) async {
                         ],
                       ),
                       SizedBox(height: 10),
-
-                      // รูปเมนู
                       if (order['imageUrl'] != null)
                         Image.network(order['imageUrl'], height: 200, width: double.infinity, fit: BoxFit.cover),
                       SizedBox(height: 20),
-
-                      // ชื่อเมนู
                       Text(
                         'ชื่อเมนู: ${order['name']}',
                         style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                       ),
                       SizedBox(height: 10),
-
-                      // รายละเอียด
                       Text(
                         'รายละเอียด: ${order['description']}',
                         style: TextStyle(fontSize: 16),
                       ),
-                
-
-                      // จำนวน
                       Text(
                         'จำนวน: ${order['quantity']}',
                         style: TextStyle(fontSize: 16),
                       ),
-                  
-
-                      // ข้อมูลผู้ซื้อและผู้ขาย
                       Text(
                         'เบอร์ผู้ซื้อ: ${order['buyer']}',
                         style: TextStyle(fontSize: 16),
@@ -470,14 +421,12 @@ void _updateOrderStatus(String orderId) async {
                         style: TextStyle(fontSize: 16),
                       ),
                       SizedBox(height: 20),
-
-                      // Map ที่มี marker 3 จุด: ร้านค้า, ไรเดอร์, ลูกค้า
                       if (storeLocation != null || customerLocation != null || riderLocation != null)
                         Container(
                           height: 300,
                           child: FlutterMap(
                             options: MapOptions(
-                              center: storeLocation ?? customerLocation ?? LatLng(0, 0), // Default center
+                              center: storeLocation ?? customerLocation ?? LatLng(0, 0),
                               zoom: 13.0,
                             ),
                             children: [
@@ -487,7 +436,6 @@ void _updateOrderStatus(String orderId) async {
                               ),
                               MarkerLayer(
                                 markers: [
-                                  // ร้านค้า
                                   if (storeLocation != null)
                                     Marker(
                                       width: 80.0,
@@ -495,7 +443,6 @@ void _updateOrderStatus(String orderId) async {
                                       point: storeLocation,
                                       builder: (ctx) => Icon(Icons.store, color: Colors.green, size: 40),
                                     ),
-                                  // ลูกค้า
                                   if (customerLocation != null)
                                     Marker(
                                       width: 80.0,
@@ -503,7 +450,6 @@ void _updateOrderStatus(String orderId) async {
                                       point: customerLocation,
                                       builder: (ctx) => Icon(Icons.home, color: Colors.blue, size: 40),
                                     ),
-                                  // ไรเดอร์
                                   if (riderLocation != null)
                                     Marker(
                                       width: 80.0,
@@ -517,8 +463,6 @@ void _updateOrderStatus(String orderId) async {
                           ),
                         ),
                       SizedBox(height: 20),
-
-                      // ปุ่มปิด dialog
                       Center(
                         child: ElevatedButton(
                           onPressed: () {
